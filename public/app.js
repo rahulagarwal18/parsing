@@ -16,6 +16,8 @@ let appState = {
   executiveSummary: ''
 };
 
+let currentPdfBlobUrl = null;
+
 // DOM Elements
 const stepNavs = [
   document.getElementById('step-nav-1'),
@@ -159,6 +161,54 @@ function setupEventListeners() {
   btnRestartApp.addEventListener('click', restartApplication);
   searchInput.addEventListener('input', filterReportTable);
   statusFilter.addEventListener('change', filterReportTable);
+
+  // --- MODAL: Parsed Text View ---
+  const closeModalBtn = document.getElementById('close-modal-btn');
+  const modalOverlay = document.getElementById('parsed-text-modal');
+  if (closeModalBtn && modalOverlay) {
+    const closeModal = () => {
+      modalOverlay.style.display = 'none';
+      const container = document.getElementById('modal-pdf-viewer-container');
+      if (container) container.innerHTML = '';
+      if (currentPdfBlobUrl) {
+        URL.revokeObjectURL(currentPdfBlobUrl);
+        currentPdfBlobUrl = null;
+      }
+    };
+    closeModalBtn.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
+  }
+
+  // --- MODAL TABS: switcher logic ---
+  const tabs = document.querySelectorAll('.pane-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      // Deactivate all tabs
+      tabs.forEach(t => {
+        t.classList.remove('active');
+        t.style.color = 'var(--text-muted)';
+        t.style.borderBottomColor = 'transparent';
+        t.style.fontWeight = '500';
+      });
+
+      // Activate clicked tab
+      tab.classList.add('active');
+      tab.style.color = '#fff';
+      tab.style.borderBottomColor = 'var(--cyan)';
+      tab.style.fontWeight = '600';
+
+      // Hide all content panels
+      const panels = document.querySelectorAll('.tab-content-panel');
+      panels.forEach(p => p.style.display = 'none');
+
+      // Show the selected panel
+      const targetTab = tab.dataset.tab;
+      const targetPanel = document.getElementById(`modal-tab-${targetTab}-content`);
+      if (targetPanel) {
+        targetPanel.style.display = 'block';
+      }
+    });
+  });
 }
 
 // Stepper navigation flow helper
@@ -430,6 +480,13 @@ function renderParsedPdfTable() {
     th.innerText = h;
     headerRow.appendChild(th);
   });
+
+  // Action header
+  const thAction = document.createElement('th');
+  thAction.innerText = 'Action';
+  thAction.style.textAlign = 'center';
+  headerRow.appendChild(thAction);
+
   thead.appendChild(headerRow);
   table.appendChild(thead);
 
@@ -448,9 +505,127 @@ function renderParsedPdfTable() {
       td.innerText = row[h] !== undefined ? row[h] : '';
       tr.appendChild(td);
     });
+
+    // Action cell with "View Text" button
+    const tdAction = document.createElement('td');
+    tdAction.style.textAlign = 'center';
+    
+    const viewBtn = document.createElement('button');
+    viewBtn.className = 'secondary-btn';
+    viewBtn.style.padding = '4px 10px';
+    viewBtn.style.fontSize = '12px';
+    viewBtn.style.minHeight = 'auto';
+    viewBtn.style.display = 'inline-flex';
+    viewBtn.style.alignItems = 'center';
+    viewBtn.style.gap = '4px';
+    viewBtn.innerHTML = `<i data-lucide="eye" style="width: 12px; height: 12px;"></i> View Text`;
+    
+    viewBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showParsedTextModal(row.filename, row.rawMarkdown, row);
+    });
+    
+    tdAction.appendChild(viewBtn);
+    tr.appendChild(tdAction);
+
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
+  lucide.createIcons();
+}
+
+function showParsedTextModal(filename, rawMarkdown, rowData) {
+  const modal = document.getElementById('parsed-text-modal');
+  const title = document.getElementById('modal-title');
+  const pdfContainer = document.getElementById('modal-pdf-viewer-container');
+  const renderedContent = document.getElementById('modal-tab-rendered-content');
+  const rawContent = document.getElementById('modal-tab-raw-content');
+  const jsonContent = document.getElementById('modal-tab-json-content');
+  
+  if (!modal) return;
+
+  // Set title
+  if (title) {
+    title.innerHTML = `<i data-lucide="file-text" style="color: var(--cyan); margin-right: 8px;"></i> ${filename} - Document Layout`;
+  }
+
+  // Clear previous blob url if exists
+  if (currentPdfBlobUrl) {
+    URL.revokeObjectURL(currentPdfBlobUrl);
+    currentPdfBlobUrl = null;
+  }
+
+  // Load PDF into Left Pane
+  if (pdfContainer) {
+    pdfContainer.innerHTML = '';
+    // Find matching local File object from appState.pdfFiles
+    const file = appState.pdfFiles.find(f => f.name === filename);
+    if (file) {
+      currentPdfBlobUrl = URL.createObjectURL(file);
+      // Create iframe
+      const iframe = document.createElement('iframe');
+      iframe.src = currentPdfBlobUrl;
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = 'none';
+      pdfContainer.appendChild(iframe);
+    } else {
+      pdfContainer.innerHTML = `
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-muted); gap:10px; padding:20px; text-align:center;">
+          <i data-lucide="alert-circle" style="width:40px; height:40px; color:var(--text-muted);"></i>
+          <span>Source PDF file not found in current browser cache.</span>
+          <span style="font-size:12px;">Ensure the file is uploaded in Step 1.</span>
+        </div>
+      `;
+    }
+  }
+
+  // Load Rendered Markdown
+  if (renderedContent) {
+    renderedContent.innerHTML = parseMarkdown(rawMarkdown);
+  }
+
+  // Load Raw Markdown Source
+  if (rawContent) {
+    rawContent.innerText = rawMarkdown;
+  }
+
+  // Load Extracted JSON (excluding rawMarkdown and filename for clean view)
+  if (jsonContent && rowData) {
+    const cleanJson = { ...rowData };
+    delete cleanJson.rawMarkdown;
+    delete cleanJson.filename;
+    jsonContent.innerText = JSON.stringify(cleanJson, null, 2);
+  }
+
+  // Reset tab active state to "Rendered Layout" on open
+  const tabs = document.querySelectorAll('.pane-tab');
+  tabs.forEach(tab => {
+    if (tab.dataset.tab === 'rendered') {
+      tab.classList.add('active');
+      tab.style.color = '#fff';
+      tab.style.borderBottomColor = 'var(--cyan)';
+      tab.style.fontWeight = '600';
+    } else {
+      tab.classList.remove('active');
+      tab.style.color = 'var(--text-muted)';
+      tab.style.borderBottomColor = 'transparent';
+      tab.style.fontWeight = '500';
+    }
+  });
+
+  const contentPanels = document.querySelectorAll('.tab-content-panel');
+  contentPanels.forEach(panel => {
+    if (panel.id === 'modal-tab-rendered-content') {
+      panel.style.display = 'block';
+    } else {
+      panel.style.display = 'none';
+    }
+  });
+
+  // Display modal
+  modal.style.display = 'flex';
+  lucide.createIcons();
 }
 
 // --- STEP 3: EXCEL UPLOAD AND MAPPING HANDLERS ---

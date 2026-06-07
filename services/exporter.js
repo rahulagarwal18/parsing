@@ -1,11 +1,11 @@
 import XLSX from "xlsx";
 import PDFDocument from "pdfkit";
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle } from "docx";
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from "docx";
 
 /**
  * Generates an Excel report using the 'xlsx' library.
  * 
- * @param {Object} comparisonResult - Result from comparator.compareData
+ * @param {Object} comparisonResult - Result from comparator.reconcileTables
  * @param {string[]} selectedHeaders - List of headers compared
  * @param {string} matchKey - Match key
  * @returns {Buffer} Excel file buffer
@@ -30,7 +30,6 @@ export function generateExcelReport(comparisonResult, selectedHeaders, matchKey)
   XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
 
   // --- SHEET 2: COMPARISON DETAILS ---
-  // Headers: PDF Filename, Match Status, Excel Row, Key Value, [For each selected header: Excel Header, PDF Header, Match?]
   const detailHeaders = ["PDF Filename", "Status", "Matched Excel Row", `Key Value (${matchKey})`];
   for (const h of selectedHeaders) {
     detailHeaders.push(`Excel: ${h}`, `PDF: ${h}`, `Status: ${h}`);
@@ -63,8 +62,7 @@ export function generateExcelReport(comparisonResult, selectedHeaders, matchKey)
 
   // --- SHEET 3: UNMATCHED EXCEL ROWS ---
   const unmatchedRows = [["Original Excel Row Number"]];
-  if (comparisonResult.unmatchedExcelRows.length > 0) {
-    // Collect all headers from first unmatched row to write header names
+  if (comparisonResult.unmatchedExcelRows && comparisonResult.unmatchedExcelRows.length > 0) {
     const sampleRow = comparisonResult.unmatchedExcelRows[0].data;
     const excelHeaders = Object.keys(sampleRow);
     unmatchedRows[0].push(...excelHeaders);
@@ -83,7 +81,6 @@ export function generateExcelReport(comparisonResult, selectedHeaders, matchKey)
   const unmatchedSheet = XLSX.utils.aoa_to_sheet(unmatchedRows);
   XLSX.utils.book_append_sheet(wb, unmatchedSheet, "Unmatched Excel Rows");
 
-  // Write and return buffer
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
 
@@ -92,9 +89,10 @@ export function generateExcelReport(comparisonResult, selectedHeaders, matchKey)
  * 
  * @param {Object} comparisonResult 
  * @param {string[]} selectedHeaders 
+ * @param {string} executiveSummary
  * @returns {Promise<Buffer>} PDF file buffer
  */
-export function generatePdfReport(comparisonResult, selectedHeaders) {
+export function generatePdfReport(comparisonResult, selectedHeaders, executiveSummary) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40, size: "A4" });
     const chunks = [];
@@ -162,6 +160,44 @@ export function generatePdfReport(comparisonResult, selectedHeaders) {
 
     doc.y = bottomY + 90;
 
+    // --- EXECUTIVE SUMMARY SECTION ---
+    if (executiveSummary) {
+      doc.addPage();
+      doc.fillColor(darkTextColor).font("Helvetica-Bold").fontSize(18).text("Executive Reconciliation Summary");
+      doc.moveDown(1);
+      
+      const cleanSummary = executiveSummary
+        .replace(/```markdown\s*/g, "")
+        .replace(/```\s*/g, "")
+        .trim();
+
+      const lines = cleanSummary.split("\n");
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("###")) {
+          doc.moveDown(0.5);
+          doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(12).text(trimmed.replace(/^###\s+/, ""), { width: doc.page.width - 80 });
+          doc.moveDown(0.3);
+        } else if (trimmed.startsWith("##")) {
+          doc.moveDown(0.8);
+          doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(14).text(trimmed.replace(/^##\s+/, ""), { width: doc.page.width - 80 });
+          doc.moveDown(0.4);
+        } else if (trimmed.startsWith("#")) {
+          doc.moveDown(1);
+          doc.fillColor(primaryColor).font("Helvetica-Bold").fontSize(16).text(trimmed.replace(/^#\s+/, ""), { width: doc.page.width - 80 });
+          doc.moveDown(0.5);
+        } else if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
+          doc.fillColor(darkTextColor).font("Helvetica").fontSize(10);
+          doc.text("• " + trimmed.substring(1).trim(), { width: doc.page.width - 80, paragraphGap: 4 });
+        } else if (trimmed.length > 0) {
+          doc.fillColor(darkTextColor).font("Helvetica").fontSize(10);
+          doc.text(trimmed, { width: doc.page.width - 80, paragraphGap: 6 });
+        } else {
+          doc.moveDown(0.3);
+        }
+      }
+    }
+
     // --- DETAILED RECORDS TABLE ---
     doc.addPage();
     doc.fillColor(darkTextColor).font("Helvetica-Bold").fontSize(16).text("Detailed Comparison Results");
@@ -173,15 +209,16 @@ export function generatePdfReport(comparisonResult, selectedHeaders) {
     let curX = 40;
     
     // Draw table header background
+    const headerY = doc.y + 5;
     doc.rect(40, doc.y, doc.page.width - 80, 20).fill(primaryColor);
     doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(9);
 
     for (let i = 0; i < headers.length; i++) {
-      doc.text(headers[i], curX + 5, doc.y - 15, { width: colWidths[i] - 10, lineBreak: false });
+      doc.text(headers[i], curX + 5, headerY, { width: colWidths[i] - 10, lineBreak: false });
       curX += colWidths[i];
     }
     
-    doc.y += 10;
+    doc.y += 20;
     doc.font("Helvetica").fontSize(8).fillColor(darkTextColor);
 
     // Draw rows
@@ -190,14 +227,15 @@ export function generatePdfReport(comparisonResult, selectedHeaders) {
       if (doc.y > doc.page.height - 60) {
         doc.addPage();
         // Redraw table header on new page
+        const newHeaderY = doc.y + 5;
         doc.rect(40, doc.y, doc.page.width - 80, 20).fill(primaryColor);
         doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(9);
         let tempX = 40;
         for (let i = 0; i < headers.length; i++) {
-          doc.text(headers[i], tempX + 5, doc.y - 15, { width: colWidths[i] - 10, lineBreak: false });
+          doc.text(headers[i], tempX + 5, newHeaderY, { width: colWidths[i] - 10, lineBreak: false });
           tempX += colWidths[i];
         }
-        doc.y += 10;
+        doc.y += 20;
         doc.font("Helvetica").fontSize(8).fillColor(darkTextColor);
       }
 
@@ -208,14 +246,14 @@ export function generatePdfReport(comparisonResult, selectedHeaders) {
       if (record.status === "MISMATCH") {
         for (const h of selectedHeaders) {
           const field = record.fields[h];
-          if (field.status === "MISMATCH") {
+          if (field && field.status === "MISMATCH") {
             issues.push(`${h}: Excel '${field.excelValue}' vs PDF '${field.pdfValue}'`);
           }
         }
       } else if (record.status === "PARTIAL_MATCH") {
         for (const h of selectedHeaders) {
           const field = record.fields[h];
-          if (field.status === "MISSING_IN_PDF") {
+          if (field && field.status === "MISSING_IN_PDF") {
             issues.push(`${h} is missing in PDF`);
           }
         }
@@ -256,9 +294,10 @@ export function generatePdfReport(comparisonResult, selectedHeaders) {
  * 
  * @param {Object} comparisonResult 
  * @param {string[]} selectedHeaders 
+ * @param {string} executiveSummary
  * @returns {Promise<Buffer>} Word document buffer
  */
-export async function generateDocxReport(comparisonResult, selectedHeaders) {
+export async function generateDocxReport(comparisonResult, selectedHeaders, executiveSummary) {
   const tableRows = [
     new TableRow({
       children: [
@@ -275,14 +314,14 @@ export async function generateDocxReport(comparisonResult, selectedHeaders) {
     if (record.status === "MISMATCH") {
       for (const h of selectedHeaders) {
         const field = record.fields[h];
-        if (field.status === "MISMATCH") {
+        if (field && field.status === "MISMATCH") {
           issues.push(`${h}: Excel [${field.excelValue}] != PDF [${field.pdfValue}]`);
         }
       }
     } else if (record.status === "PARTIAL_MATCH") {
       for (const h of selectedHeaders) {
         const field = record.fields[h];
-        if (field.status === "MISSING_IN_PDF") {
+        if (field && field.status === "MISSING_IN_PDF") {
           issues.push(`${h} is missing in PDF`);
         }
       }
@@ -304,43 +343,78 @@ export async function generateDocxReport(comparisonResult, selectedHeaders) {
     );
   }
 
+  const docChildren = [
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "PDF & Excel Reconciliation Report",
+          bold: true,
+          size: 36,
+          color: "6366F1"
+        })
+      ]
+    }),
+    new Paragraph({ text: `Report Generated At: ${new Date().toLocaleString()}` }),
+    new Paragraph({ text: "" }),
+    
+    new Paragraph({
+      children: [new TextRun({ text: "Summary Metrics", bold: true, size: 24 })]
+    }),
+    new Paragraph({ text: `• Total PDFs Processed: ${comparisonResult.summary.totalPdfsProcessed}` }),
+    new Paragraph({ text: `• Full & Partial Matches: ${comparisonResult.summary.totalMatches}` }),
+    new Paragraph({ text: `• Mismatches: ${comparisonResult.summary.totalMismatches}` }),
+    new Paragraph({ text: `• PDFs with No Excel Match: ${comparisonResult.summary.totalNoExcelMatch}` }),
+    new Paragraph({ text: `• Unmatched Excel Rows: ${comparisonResult.summary.totalUnmatchedExcelRows}` }),
+    new Paragraph({ text: "" }),
+  ];
+
+  if (executiveSummary) {
+    docChildren.push(
+      new Paragraph({
+        children: [new TextRun({ text: "Executive Reconciliation Summary", bold: true, size: 24, color: "6366F1" })]
+      }),
+      new Paragraph({ text: "" })
+    );
+
+    const cleanSummary = executiveSummary
+      .replace(/```markdown\s*/g, "")
+      .replace(/```\s*/g, "")
+      .trim();
+
+    const lines = cleanSummary.split("\n");
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("###")) {
+        docChildren.push(new Paragraph({ children: [new TextRun({ text: trimmed.replace(/^###\s+/, ""), bold: true, size: 20, color: "6366F1" })], spacing: { before: 200, after: 100 } }));
+      } else if (trimmed.startsWith("##")) {
+        docChildren.push(new Paragraph({ children: [new TextRun({ text: trimmed.replace(/^##\s+/, ""), bold: true, size: 24, color: "6366F1" })], spacing: { before: 240, after: 120 } }));
+      } else if (trimmed.startsWith("#")) {
+        docChildren.push(new Paragraph({ children: [new TextRun({ text: trimmed.replace(/^#\s+/, ""), bold: true, size: 28, color: "6366F1" })], spacing: { before: 300, after: 150 } }));
+      } else if (trimmed.startsWith("-") || trimmed.startsWith("*")) {
+        docChildren.push(new Paragraph({ text: `• ${trimmed.substring(1).trim()}`, spacing: { after: 100 } }));
+      } else if (trimmed.length > 0) {
+        docChildren.push(new Paragraph({ text: trimmed, spacing: { after: 120 } }));
+      }
+    });
+    docChildren.push(new Paragraph({ text: "" }));
+  }
+
+  docChildren.push(
+    new Paragraph({
+      children: [new TextRun({ text: "Comparison Log Table", bold: true, size: 24 })]
+    }),
+    new Paragraph({ text: "" }),
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: tableRows
+    })
+  );
+
   const doc = new Document({
     sections: [
       {
         properties: {},
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "PDF & Excel Reconciliation Report",
-                bold: true,
-                size: 36,
-                color: "6366F1"
-              })
-            ]
-          }),
-          new Paragraph({ text: `Report Generated At: ${new Date().toLocaleString()}` }),
-          new Paragraph({ text: "" }),
-          
-          new Paragraph({
-            children: [new TextRun({ text: "Summary Metrics", bold: true, size: 24 })]
-          }),
-          new Paragraph({ text: `• Total PDFs Processed: ${comparisonResult.summary.totalPdfsProcessed}` }),
-          new Paragraph({ text: `• Full & Partial Matches: ${comparisonResult.summary.totalMatches}` }),
-          new Paragraph({ text: `• Mismatches: ${comparisonResult.summary.totalMismatches}` }),
-          new Paragraph({ text: `• PDFs with No Excel Match: ${comparisonResult.summary.totalNoExcelMatch}` }),
-          new Paragraph({ text: `• Unmatched Excel Rows: ${comparisonResult.summary.totalUnmatchedExcelRows}` }),
-          new Paragraph({ text: "" }),
-          
-          new Paragraph({
-            children: [new TextRun({ text: "Comparison Log Table", bold: true, size: 24 })]
-          }),
-          new Paragraph({ text: "" }),
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            rows: tableRows
-          })
-        ]
+        children: docChildren
       }
     ]
   });

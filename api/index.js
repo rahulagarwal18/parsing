@@ -226,6 +226,7 @@ app.post("/api/upload-pdf-batch", upload.array("pdfFiles", 205), async (req, res
         // Save result
         results.push({
           filename: originalName,
+          rawMarkdown: parsed.markdown,
           ...extractedData
         });
 
@@ -246,7 +247,7 @@ app.post("/api/upload-pdf-batch", upload.array("pdfFiles", 205), async (req, res
         });
 
         // Push empty record with filename so it shows up
-        const fallbackObj = { filename: originalName };
+        const fallbackObj = { filename: originalName, rawMarkdown: "Failed to parse PDF document: " + err.message };
         if (detectedHeaders) {
           detectedHeaders.forEach(h => fallbackObj[h] = "");
         }
@@ -384,7 +385,7 @@ app.get("/api/export/:type", async (req, res) => {
     return res.status(404).json({ error: "No comparison results available to export." });
   }
 
-  const { report, selectedHeaders, matchKey } = currentJobState.comparisonResults;
+  const { report, selectedHeaders, matchKey, executiveSummary } = currentJobState.comparisonResults;
 
   try {
     if (type === "excel") {
@@ -395,14 +396,14 @@ app.get("/api/export/:type", async (req, res) => {
     } 
     
     if (type === "pdf") {
-      const buffer = await generatePdfReport(report, selectedHeaders);
+      const buffer = await generatePdfReport(report, selectedHeaders, executiveSummary);
       res.setHeader("Content-Disposition", `attachment; filename="comparison_report_${Date.now()}.pdf"`);
       res.setHeader("Content-Type", "application/pdf");
       return res.send(buffer);
     } 
     
     if (type === "word") {
-      const buffer = await generateDocxReport(report, selectedHeaders);
+      const buffer = await generateDocxReport(report, selectedHeaders, executiveSummary);
       res.setHeader("Content-Disposition", `attachment; filename="comparison_report_${Date.now()}.docx"`);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       return res.send(buffer);

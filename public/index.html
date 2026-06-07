@@ -382,6 +382,68 @@
     <p>MultiBank Group &copy; 2026.</p>
   </footer>
 
+  <!-- Modal for viewing parsed PDF split preview (LlamaParse Style) -->
+  <div class="modal-overlay" id="parsed-text-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(6px); z-index: 9999; align-items: center; justify-content: center; padding: 15px;">
+    <div class="modal-content" style="background: var(--bg-card); border: 1px solid var(--bg-card-border); border-radius: 12px; width: 95vw; max-width: 1600px; height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,0.6);">
+      <!-- Modal Header -->
+      <div class="modal-header" style="padding: 15px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.01);">
+        <h3 id="modal-title" style="margin: 0; font-family: var(--font-title); font-weight: 700; font-size: 18px; color: #fff; display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="file-text" style="color: var(--cyan);"></i> Document Layout Viewer
+        </h3>
+        <button id="close-modal-btn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; padding: 5px; transition: color 0.2s;"><i data-lucide="x"></i></button>
+      </div>
+      
+      <!-- Split Body Container -->
+      <div class="modal-split-container" style="display: flex; flex: 1; overflow: hidden; height: 100%;">
+        <!-- Left Pane: PDF Viewer -->
+        <div class="modal-left-pane" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #1a1a24; border-right: 1px solid rgba(255,255,255,0.08);">
+          <div class="pane-header" style="padding: 10px 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-weight: 500; font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="file" style="width:14px; height:14px; color: var(--cyan);"></i> Original PDF Document
+            </span>
+          </div>
+          <div id="modal-pdf-viewer-container" style="flex: 1; width: 100%; height: 100%;">
+            <!-- iframe or embed will be inserted here dynamically -->
+          </div>
+        </div>
+
+        <!-- Right Pane: Parser Outputs -->
+        <div class="modal-right-pane" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: rgba(0,0,0,0.15);">
+          <!-- Tab Bar -->
+          <div class="pane-tabs-bar" style="padding: 8px 15px 0 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; gap: 10px;">
+            <button class="pane-tab active" data-tab="rendered" style="background: none; border: none; border-bottom: 2px solid var(--cyan); color: #fff; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+              <i data-lucide="layout" style="width:14px; height:14px;"></i> Rendered Layout
+            </button>
+            <button class="pane-tab" data-tab="raw" style="background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+              <i data-lucide="align-left" style="width:14px; height:14px;"></i> Markdown Source
+            </button>
+            <button class="pane-tab" data-tab="json" style="background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+              <i data-lucide="braces" style="width:14px; height:14px;"></i> Extracted Fields (JSON)
+            </button>
+          </div>
+
+          <!-- Output Content Containers -->
+          <div class="pane-content-wrapper" style="flex: 1; overflow-y: auto; position: relative;">
+            <!-- Rendered Markdown Tab Content -->
+            <div id="modal-tab-rendered-content" class="tab-content-panel active" style="padding: 20px; color: #cbd5e1; font-size: 14px; line-height: 1.6;">
+              <!-- Rendered Markdown goes here -->
+            </div>
+            
+            <!-- Raw Markdown Tab Content -->
+            <div id="modal-tab-raw-content" class="tab-content-panel" style="display: none; padding: 20px; color: #cbd5e1; font-size: 13px; line-height: 1.6; font-family: monospace; white-space: pre-wrap; background: rgba(0,0,0,0.3); height: 100%; box-sizing: border-box; overflow-y: auto;">
+              <!-- Raw Markdown text goes here -->
+            </div>
+
+            <!-- Extracted JSON Tab Content -->
+            <div id="modal-tab-json-content" class="tab-content-panel" style="display: none; padding: 20px; color: #facc15; font-size: 13px; line-height: 1.6; font-family: monospace; white-space: pre-wrap; background: rgba(0,0,0,0.3); height: 100%; box-sizing: border-box; overflow-y: auto;">
+              <!-- Extracted JSON goes here -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

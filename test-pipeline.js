@@ -60,13 +60,15 @@ async function runTest() {
   fs.writeFileSync("./temp/test_report.xlsx", excelBuffer);
   console.log(" Excel report generated: ./temp/test_report.xlsx");
 
+  const mockExecutiveSummary = "# Audit Summary\n\nThis is a mock executive reconciliation summary.\n\n## Findings\n- Acme Corp matched successfully.\n- Globex Corp has a vendor mismatch.\n- Umbrella Corp is missing its amount.\n\n### Recommendation\nCheck Globex Corp vendor name.";
+
   console.log("Testing PDF Exporter...");
-  const pdfBuffer = await generatePdfReport(report, selectedHeaders);
+  const pdfBuffer = await generatePdfReport(report, selectedHeaders, mockExecutiveSummary);
   fs.writeFileSync("./temp/test_report.pdf", pdfBuffer);
   console.log(" PDF report generated: ./temp/test_report.pdf");
 
   console.log("Testing Word Exporter...");
-  const docxBuffer = await generateDocxReport(report, selectedHeaders);
+  const docxBuffer = await generateDocxReport(report, selectedHeaders, mockExecutiveSummary);
   fs.writeFileSync("./temp/test_report.docx", docxBuffer);
   console.log(" Word report generated: ./temp/test_report.docx");
 

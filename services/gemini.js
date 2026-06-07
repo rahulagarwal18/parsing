@@ -179,12 +179,34 @@ async function callClaude(prompt, responseSchema, toolName = "extract_data") {
 
 /**
  * Extracts values for the requested headers from the parsed document markdown.
- * Uses structured tool calling with Claude to guarantee format.
+ * Sanitizes header names to meet Anthropic's parameter name requirements (no spaces).
  */
 export async function extractFieldsFromText(documentText, headers, customPrompt = "") {
   if (!headers || headers.length === 0) {
     return {};
   }
+
+  // Create clean property keys matching ^[a-zA-Z0-9_.-]{1,64}$
+  const headerMap = {}; // originalHeader -> sanitizedKey
+  const reverseMap = {}; // sanitizedKey -> originalHeader
+
+  headers.forEach((header, idx) => {
+    // Replace spaces and special characters with underscores, keep alphanumeric/dots/dashes
+    let sanitized = header.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    if (sanitized.length > 50) {
+      sanitized = sanitized.substring(0, 50);
+    }
+    // Handle duplicates
+    let uniqueSanitized = sanitized;
+    let counter = 1;
+    while (reverseMap[uniqueSanitized]) {
+      uniqueSanitized = `${sanitized}_${counter}`;
+      counter++;
+    }
+    
+    headerMap[header] = uniqueSanitized;
+    reverseMap[uniqueSanitized] = header;
+  });
 
   let prompt = `
 You are a highly accurate data extraction system. Your task is to extract the exact values for the requested fields from the following document text.
@@ -192,8 +214,11 @@ If a field is not present in the document, return an empty string "" for that fi
 Do not make up values. Only extract what is present or clearly implied.
 
 Fields to extract:
-${headers.map(h => `- ${h}`).join("\n")}
 `;
+
+  headers.forEach(h => {
+    prompt += `- ${h} (corresponds to the schema property name: "${headerMap[h]}")\n`;
+  });
 
   if (customPrompt && customPrompt.trim()) {
     prompt += `
@@ -212,7 +237,8 @@ ${documentText}
 
   const schemaProperties = {};
   for (const header of headers) {
-    schemaProperties[header] = {
+    const sKey = headerMap[header];
+    schemaProperties[sKey] = {
       type: "string",
       description: `Value of the field '${header}' extracted from the text. Empty string if not found.`
     };
@@ -221,11 +247,19 @@ ${documentText}
   const responseSchema = {
     type: "object",
     properties: schemaProperties,
-    required: headers
+    required: Object.values(headerMap)
   };
 
   try {
-    return await callClaude(prompt, responseSchema, "extract_fields");
+    const rawResult = await callClaude(prompt, responseSchema, "extract_fields");
+    
+    // Map sanitized keys back to original headers
+    const result = {};
+    for (const header of headers) {
+      const sKey = headerMap[header];
+      result[header] = rawResult[sKey] !== undefined ? String(rawResult[sKey]).trim() : "";
+    }
+    return result;
   } catch (error) {
     console.error("Claude field extraction error:", error);
     const fallback = {};

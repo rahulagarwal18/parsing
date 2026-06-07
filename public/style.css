@@ -1273,3 +1273,152 @@ textarea:focus {
   color: var(--text-muted);
   margin-top: auto;
 }
+
+/* Mobile Responsiveness Improvements */
+@media (max-width: 768px) {
+  .app-container {
+    margin: 20px auto;
+    gap: 20px;
+    width: 92%;
+  }
+  .setup-card {
+    padding: 20px;
+  }
+  .stepper-container {
+    padding: 15px 20px;
+  }
+}
+
+@media (max-width: 600px) {
+  .header-container {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 95%;
+    gap: 8px;
+    padding: 5px 0;
+  }
+  
+  .logo-multi, .logo-bank, .logo-group {
+    font-size: 16px;
+  }
+  
+  .logo-group {
+    margin-left: 3px;
+  }
+  
+  .logo-chart-icon {
+    width: 10px;
+    height: 10px;
+    margin-top: -3px;
+    margin-left: 2px;
+  }
+  
+  .reconcile-brand {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+  
+  .reconcile-text {
+    font-size: 14px;
+  }
+  
+  .reconcile-logo-icon {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .step-label {
+    display: none;
+  }
+  
+  .step-line {
+    margin: 0 10px;
+  }
+  
+  .system-status {
+    bottom: 12px;
+    right: 12px;
+    padding: 5px 10px;
+  }
+  
+  .status-text {
+    font-size: 10px;
+  }
+  
+  .drop-zone {
+    padding: 30px 15px;
+  }
+  
+  .drop-text {
+    font-size: 14px;
+  }
+  
+  .card-header {
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  
+  .card-icon {
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+  }
+  
+  .card-header h2 {
+    font-size: 18px;
+  }
+  
+  .card-header p {
+    font-size: 12px;
+  }
+  
+  .app-footer-bar {
+    padding: 15px 110px 15px 15px;
+    text-align: left;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 500px) {
+  .action-footer {
+    flex-direction: column-reverse;
+    gap: 10px;
+    margin-top: 25px;
+    padding-top: 15px;
+  }
+  
+  .action-footer button {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .export-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .export-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .search-filter-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .filter-wrapper {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .pdf-list-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -2,7 +2,6 @@
   "name": "pdf-excel-comparator",
   "version": "1.0.0",
   "description": "Compare parsed PDFs against an Excel sheet",
-  "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js",

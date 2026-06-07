@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reconciliation Dashboard - PDF & Excel Data Comparator</title>
-  <!-- Google Fonts: Inter & Outfit -->
+  <title>MultiBank Group - Reconciliation Dashboard</title>
+  <!-- Google Fonts: Inter & Montserrat -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- Lucide Icons for premium visual feel -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Main CSS File -->
@@ -18,8 +18,14 @@
   <header class="app-header">
     <div class="header-container">
       <div class="logo-area">
-        <i data-lucide="layers" class="logo-icon"></i>
-        <h1>Reconcile<span>AI</span></h1>
+        <div class="logo-text-wrapper">
+          <span class="logo-multi">Multi</span><span class="logo-bank">Bank</span><span class="logo-group">Group</span>
+          <svg class="logo-chart-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <rect x="5.5" y="9" width="2.5" height="9" rx="1.25" />
+            <rect x="10.5" y="3" width="2.5" height="15" rx="1.25" />
+            <rect x="15.5" y="6" width="2.5" height="10" rx="1.25" />
+          </svg>
+        </div>
       </div>
       <div class="system-status">
         <span class="status-indicator online"></span>
@@ -122,6 +128,14 @@
                 <option value="" disabled selected>Select unique matching key...</option>
               </select>
               <i data-lucide="chevron-down" class="select-chevron"></i>
+            </div>
+          </div>
+
+          <div class="config-col" style="grid-column: span 2; margin-top: 20px;">
+            <h3>3. Custom Instructions / Prompt (Optional)</h3>
+            <p class="section-help">Guide the AI with specific matching or extraction instructions (e.g. "The Excel 'Vendor Name' corresponds to 'Supplier' in the PDFs", "Ignore the sub-header billing details, match only the grand totals").</p>
+            <div class="textarea-wrapper">
+              <textarea id="custom-prompt-input" rows="3" placeholder="Enter custom prompt instructions for the AI matching engine..."></textarea>
             </div>
           </div>
         </div>
@@ -327,7 +341,7 @@
   </main>
 
   <footer class="app-footer-bar">
-    <p>Powered by LlamaParse & Gemini. ReconcileAI &copy; 2026.</p>
+    <p>Powered by LlamaParse & Gemini. MultiBank Group &copy; 2026.</p>
   </footer>
 
   <script src="app.js"></script>

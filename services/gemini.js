@@ -19,9 +19,10 @@ const ai = new GoogleGenAI({
  * 
  * @param {string} documentText - The text or markdown parsed from the PDF
  * @param {string[]} headers - The headers we want to extract
+ * @param {string} customPrompt - Custom user prompt instruction to guide extraction
  * @returns {Promise<Record<string, string>>} - Map of header -> extracted value
  */
-export async function extractFieldsFromText(documentText, headers) {
+export async function extractFieldsFromText(documentText, headers, customPrompt = "") {
   if (!apiKey) {
     throw new Error("Gemini API key is not configured.");
   }
@@ -31,14 +32,24 @@ export async function extractFieldsFromText(documentText, headers) {
   }
 
   // Construct a prompt explaining the extraction task
-  const prompt = `
+  let prompt = `
 You are a highly accurate data extraction system. Your task is to extract the exact values for the requested fields from the following document text.
 If a field is not present in the document, return an empty string "" for that field.
 Do not make up values. Only extract what is present or clearly implied.
 
 Fields to extract:
 ${headers.map(h => `- ${h}`).join("\n")}
+`;
 
+  if (customPrompt && customPrompt.trim()) {
+    prompt += `
+User Custom Instructions:
+CRITICAL: Please strictly follow these custom user instructions when performing the extraction and mapping:
+"${customPrompt.trim()}"
+`;
+  }
+
+  prompt += `
 Document Text:
 ---
 ${documentText}

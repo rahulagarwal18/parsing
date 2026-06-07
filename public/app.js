@@ -465,6 +465,9 @@ async function startPipeline() {
   formData.append('matchKey', appState.matchKey);
   formData.append('selectedHeaders', JSON.stringify(appState.selectedHeaders));
   
+  const customPrompt = document.getElementById('custom-prompt-input').value;
+  formData.append('customPrompt', customPrompt);
+  
   appState.pdfFiles.forEach(file => {
     formData.append('pdfFiles', file);
   });
@@ -852,6 +855,7 @@ function restartApplication() {
     // Reset UI forms
     resetExcelUpload();
     updatePdfListUI();
+    document.getElementById('custom-prompt-input').value = '';
     
     // Enable back going
     document.getElementById('step-nav-1').style.pointerEvents = 'auto';

@@ -150,6 +150,7 @@ app.post("/api/upload-excel", upload.single("excelFile"), (req, res) => {
 app.post("/api/process-pdfs", upload.array("pdfFiles", 205), async (req, res) => {
   const clientId = req.body.clientId;
   const matchKey = req.body.matchKey;
+  const customPrompt = req.body.customPrompt || "";
   
   let selectedHeaders = [];
   try {
@@ -207,8 +208,8 @@ app.post("/api/process-pdfs", upload.array("pdfFiles", 205), async (req, res) =>
           message: `[${fileIndex + 1}/${totalFiles}] Extracting comparison fields via Gemini...`
         });
 
-        // 2. Extract selected headers from parsed text via Gemini
-        const extractedData = await extractFieldsFromText(parsed.markdown, selectedHeaders);
+        // 2. Extract selected headers from parsed text via Gemini (with custom instructions)
+        const extractedData = await extractFieldsFromText(parsed.markdown, selectedHeaders, customPrompt);
 
         // Save result
         results.push({

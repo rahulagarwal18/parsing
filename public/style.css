@@ -7,11 +7,12 @@
 }
 
 :root {
-  --bg-main: #0B0F19;
-  --bg-card: rgba(21, 27, 44, 0.75);
-  --bg-card-border: rgba(99, 102, 241, 0.15);
-  --primary: #6366F1;
-  --primary-hover: #4F46E5;
+  --bg-main: #060913;
+  --bg-card: rgba(18, 24, 38, 0.85);
+  --bg-card-border: rgba(56, 189, 248, 0.15);
+  --primary: #38bdf8;
+  --primary-hover: #0ea5e9;
+  --primary-dark: #2563eb;
   --success: #10B981;
   --success-muted: rgba(16, 185, 129, 0.1);
   --danger: #EF4444;
@@ -20,15 +21,15 @@
   --warning-muted: rgba(245, 158, 11, 0.1);
   --text-main: #F8FAFC;
   --text-muted: #94A3B8;
-  --font-title: 'Outfit', sans-serif;
+  --font-title: 'Montserrat', sans-serif;
   --card-radius: 16px;
-  --glow-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+  --glow-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
 }
 
 body {
   background-color: var(--bg-main);
   background-image: 
-    radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
     radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 40%);
   background-attachment: fixed;
   color: var(--text-main);
@@ -64,21 +65,44 @@ body {
   gap: 10px;
 }
 
-.logo-icon {
-  color: var(--primary);
-  width: 28px;
-  height: 28px;
-}
-
-.logo-area h1 {
-  font-family: var(--font-title);
-  font-size: 24px;
-  font-weight: 800;
+.logo-text-wrapper {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
   letter-spacing: -0.5px;
 }
 
-.logo-area h1 span {
-  color: var(--primary);
+.logo-multi {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 24px;
+  color: #2b7fff; /* Royal Blue */
+}
+
+.logo-bank {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 24px;
+  color: #38bdf8; /* Cyan */
+}
+
+.logo-group {
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: 24px;
+  color: #ffffff; /* White */
+  margin-left: 6px;
+}
+
+.logo-chart-icon {
+  width: 14px;
+  height: 14px;
+  color: #ffffff;
+  display: inline-block;
+  vertical-align: top;
+  margin-top: -6px;
+  margin-left: 3px;
+  align-self: flex-start;
 }
 
 .system-status {
@@ -273,7 +297,7 @@ body {
 
 /* Drag & Drop Zone */
 .drop-zone {
-  border: 2px dashed rgba(99, 102, 241, 0.3);
+  border: 2px dashed rgba(197, 160, 89, 0.3);
   border-radius: 12px;
   padding: 50px 30px;
   text-align: center;
@@ -288,8 +312,8 @@ body {
 
 .drop-zone:hover, .drop-zone.dragover {
   border-color: var(--primary);
-  background: rgba(99, 102, 241, 0.03);
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.1) inset;
+  background: rgba(197, 160, 89, 0.03);
+  box-shadow: 0 0 15px rgba(197, 160, 89, 0.1) inset;
 }
 
 .upload-icon {
@@ -519,16 +543,16 @@ tr:last-child td {
 }
 
 .field-badge:hover {
-  background: rgba(99, 102, 241, 0.08);
-  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(197, 160, 89, 0.08);
+  border-color: rgba(197, 160, 89, 0.3);
 }
 
 .field-badge.selected {
-  background: rgba(99, 102, 241, 0.15);
+  background: rgba(197, 160, 89, 0.15);
   border-color: var(--primary);
   color: #fff;
   font-weight: 500;
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 10px rgba(197, 160, 89, 0.1);
 }
 
 .field-badge .badge-icon {
@@ -563,7 +587,7 @@ select {
 
 select:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 10px rgba(197, 160, 89, 0.15);
 }
 
 select option {
@@ -580,6 +604,29 @@ select option {
   color: var(--text-muted);
   width: 16px;
   height: 16px;
+}
+
+.textarea-wrapper {
+  width: 100%;
+}
+
+textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: var(--text-main);
+  font-size: 13px;
+  cursor: text;
+  outline: none;
+  transition: all 0.3s ease;
+  resize: vertical;
+}
+
+textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 10px rgba(197, 160, 89, 0.15);
 }
 
 /* Step 3 - PDF Grid */
@@ -705,10 +752,10 @@ select option {
 .progress-bar-fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, var(--primary) 0%, #a5b4fc 100%);
+  background: linear-gradient(90deg, var(--primary) 0%, #F3E5AB 100%);
   border-radius: 10px;
   transition: width 0.4s cubic-bezier(0.1, 0.8, 0.1, 1);
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 10px rgba(197, 160, 89, 0.4);
 }
 
 /* Console Panel styling */
@@ -768,7 +815,7 @@ select option {
 }
 
 .log-line.system {
-  color: #a5b4fc;
+  color: #F3E5AB;
 }
 
 .log-line.parsing {
@@ -851,8 +898,8 @@ select option {
 
 /* Exporter Buttons Panel */
 .export-tools-panel {
-  background: rgba(99, 102, 241, 0.04);
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  background: rgba(197, 160, 89, 0.04);
+  border: 1px solid rgba(197, 160, 89, 0.15);
   border-radius: 12px;
   padding: 24px 30px;
   margin-bottom: 35px;
@@ -979,7 +1026,7 @@ select option {
 
 .search-wrapper input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 10px rgba(197, 160, 89, 0.1);
 }
 
 .filter-wrapper {
@@ -1079,7 +1126,7 @@ select option {
 .expansion-details-container {
   padding: 15px 20px;
   border-left: 3px solid var(--primary);
-  background: rgba(99, 102, 241, 0.02);
+  background: rgba(197, 160, 89, 0.02);
   border-radius: 0 8px 8px 0;
   display: flex;
   flex-direction: column;

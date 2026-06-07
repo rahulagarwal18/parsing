@@ -7,8 +7,14 @@ import os from "os";
 import dotenv from "dotenv";
 import XLSX from "xlsx";
 import { parsePdf } from "../services/llama.js";
-import { extractFieldsFromText, convertPdfMarkdownToTable } from "../services/gemini.js";
-import { compareData } from "../services/comparator.js";
+import { 
+  extractFieldsFromText, 
+  convertPdfMarkdownToTable,
+  detectSchemaFromMarkdown,
+  generateAutoMapping,
+  generateReconciliationExecutiveSummary
+} from "../services/gemini.js";
+import { compareData, reconcileTables } from "../services/comparator.js";
 import { generateExcelReport, generatePdfReport, generateDocxReport } from "../services/exporter.js";
 import { fileURLToPath } from "url";
 
@@ -148,86 +154,29 @@ app.post("/api/upload-excel", upload.single("excelFile"), (req, res) => {
 });
 
 /**
- * Endpoint to upload PDF as Master Document.
+ * Endpoint to upload PDF files batch (up to 200+).
+ * Starts background parsing and dynamic schema detection.
  */
-app.post("/api/upload-pdf-master", upload.single("pdfMasterFile"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No PDF master file uploaded" });
-    }
-
-    const filePath = req.file.path;
-
-    // 1. Parse PDF using LlamaParse
-    const parsed = await parsePdf(filePath);
-
-    // 2. Convert LlamaParse markdown text into structured table data (headers & rows) via Gemini
-    const tableData = await convertPdfMarkdownToTable(parsed.markdown);
-
-    // Clean up uploaded file
-    try {
-      fs.unlinkSync(filePath);
-    } catch (unlinkErr) {
-      console.error(`Failed to delete master PDF temp file ${filePath}:`, unlinkErr);
-    }
-
-    // Cache the structured master data in currentJobState (acting as the master sheet)
-    currentJobState.excelData = {
-      headers: tableData.headers,
-      rows: tableData.rows
-    };
-    currentJobState.excelFilePath = null; // No Excel path since we uploaded a PDF
-    currentJobState.comparisonResults = null;
-
-    // Send headers and preview rows back to frontend
-    res.json({
-      success: true,
-      headers: tableData.headers,
-      preview: tableData.rows.slice(0, 5)
-    });
-  } catch (error) {
-    console.error("PDF master upload error:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * Endpoint to upload PDFs and trigger matching process.
- */
-app.post("/api/process-pdfs", upload.array("pdfFiles", 205), async (req, res) => {
+app.post("/api/upload-pdf-batch", upload.array("pdfFiles", 205), async (req, res) => {
   const clientId = req.body.clientId;
-  const matchKey = req.body.matchKey;
-  const customPrompt = req.body.customPrompt || "";
-  
-  let selectedHeaders = [];
-  try {
-    selectedHeaders = JSON.parse(req.body.selectedHeaders || "[]");
-  } catch (e) {
-    return res.status(400).json({ error: "Invalid selectedHeaders format" });
-  }
 
   if (!clientId) {
     return res.status(400).json({ error: "clientId is required" });
   }
-  if (!currentJobState.excelData) {
-    return res.status(400).json({ error: "No Excel data found. Please upload Excel first." });
-  }
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ error: "No PDF files uploaded" });
   }
-  if (!matchKey || !selectedHeaders.includes(matchKey)) {
-    return res.status(400).json({ error: "Match key must be selected in comparison headers" });
-  }
 
-  // Respond immediately to the request, processing continues in background
-  res.json({ success: true, message: "Processing started" });
+  // Respond immediately, processing continues in background
+  res.json({ success: true, message: "Upload successful, processing started." });
 
   const files = req.files;
   const totalFiles = files.length;
   const results = [];
   const concurrencyLimit = 3;
+  let detectedHeaders = null;
 
-  sendProgressUpdate(clientId, { status: "start", total: totalFiles, message: `Starting comparison pipeline for ${totalFiles} files...` });
+  sendProgressUpdate(clientId, { status: "start", total: totalFiles, message: `Starting LlamaParse extraction for ${totalFiles} files...` });
 
   // Process files in batches
   for (let i = 0; i < totalFiles; i += concurrencyLimit) {
@@ -248,20 +197,36 @@ app.post("/api/process-pdfs", upload.array("pdfFiles", 205), async (req, res) =>
         // 1. Parse PDF using LlamaParse
         const parsed = await parsePdf(filePath);
 
+        // 2. If schema not detected yet, detect it from the first parsed PDF
+        if (!detectedHeaders) {
+          sendProgressUpdate(clientId, {
+            status: "detecting_schema",
+            index: fileIndex,
+            filename: originalName,
+            message: `[${fileIndex + 1}/${totalFiles}] Analyzing document structure via AI...`
+          });
+          detectedHeaders = await detectSchemaFromMarkdown(parsed.markdown);
+          sendProgressUpdate(clientId, {
+            status: "schema_detected",
+            headers: detectedHeaders,
+            message: `Common schema detected: ${detectedHeaders.join(", ")}`
+          });
+        }
+
         sendProgressUpdate(clientId, {
           status: "extracting",
           index: fileIndex,
           filename: originalName,
-          message: `[${fileIndex + 1}/${totalFiles}] Extracting comparison fields via Gemini...`
+          message: `[${fileIndex + 1}/${totalFiles}] Extracting fields via Claude...`
         });
 
-        // 2. Extract selected headers from parsed text via Gemini (with custom instructions)
-        const extractedData = await extractFieldsFromText(parsed.markdown, selectedHeaders, customPrompt);
+        // 3. Extract detected headers from parsed text via Claude
+        const extractedData = await extractFieldsFromText(parsed.markdown, detectedHeaders);
 
         // Save result
         results.push({
           filename: originalName,
-          extractedData: extractedData
+          ...extractedData
         });
 
         sendProgressUpdate(clientId, {
@@ -272,7 +237,7 @@ app.post("/api/process-pdfs", upload.array("pdfFiles", 205), async (req, res) =>
         });
 
       } catch (err) {
-        console.error(`Error processing file ${originalName}:`, err);
+        console.error(`Error processing batch PDF ${originalName}:`, err);
         sendProgressUpdate(clientId, {
           status: "failed_file",
           index: fileIndex,
@@ -280,16 +245,17 @@ app.post("/api/process-pdfs", upload.array("pdfFiles", 205), async (req, res) =>
           message: `[${fileIndex + 1}/${totalFiles}] Failed: ${err.message}`
         });
 
-        results.push({
-          filename: originalName,
-          extractedData: {},
-          error: err.message
-        });
+        // Push empty record with filename so it shows up
+        const fallbackObj = { filename: originalName };
+        if (detectedHeaders) {
+          detectedHeaders.forEach(h => fallbackObj[h] = "");
+        }
+        results.push(fallbackObj);
       } finally {
         try {
           fs.unlinkSync(filePath);
         } catch (unlinkErr) {
-          console.error(`Failed to delete temp file ${filePath}:`, unlinkErr);
+          console.error(`Failed to delete temp PDF batch file ${filePath}:`, unlinkErr);
         }
       }
     });
@@ -297,35 +263,114 @@ app.post("/api/process-pdfs", upload.array("pdfFiles", 205), async (req, res) =>
     await Promise.all(batchPromises);
   }
 
-  // Once all files processed, run comparisons
   try {
-    sendProgressUpdate(clientId, { status: "comparing", message: "Reconciling PDF data with Excel sheet..." });
-    const finalReport = compareData(
+    // If we failed to parse anything or detect headers
+    if (!detectedHeaders) {
+      detectedHeaders = ["Invoice ID", "Date", "Amount", "Vendor"];
+      results.forEach(r => {
+        detectedHeaders.forEach(h => {
+          if (r[h] === undefined) r[h] = "";
+        });
+      });
+    }
+
+    // Cache PDF parsed data
+    currentJobState.pdfData = {
+      headers: detectedHeaders,
+      rows: results
+    };
+    currentJobState.comparisonResults = null; // Reset comparisons
+
+    // Stream final results back to SSE client
+    sendProgressUpdate(clientId, {
+      status: "done",
+      message: "Batch PDF processing completed successfully!",
+      data: {
+        headers: detectedHeaders,
+        rows: results
+      }
+    });
+  } catch (err) {
+    console.error("Batch PDF processing error:", err);
+    sendProgressUpdate(clientId, {
+      status: "error",
+      message: `Batch PDF processing failed: ${err.message}`
+    });
+  }
+});
+
+/**
+ * Endpoint to auto-map PDF headers to Excel headers.
+ */
+app.post("/api/auto-map-columns", async (req, res) => {
+  try {
+    const { pdfHeaders, excelHeaders } = req.body;
+    if (!pdfHeaders || !excelHeaders) {
+      return res.status(400).json({ error: "pdfHeaders and excelHeaders are required" });
+    }
+
+    const mapping = await generateAutoMapping(pdfHeaders, excelHeaders);
+    res.json({ success: true, mapping });
+  } catch (error) {
+    console.error("Auto mapping error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Endpoint to reconcile PDF rows against Excel rows and generate the Claude report.
+ */
+app.post("/api/reconcile-tables", async (req, res) => {
+  try {
+    const { mappings, matchKey } = req.body;
+
+    if (!mappings || !matchKey) {
+      return res.status(400).json({ error: "mappings and matchKey are required" });
+    }
+
+    if (!currentJobState.pdfData) {
+      return res.status(400).json({ error: "No PDF data found. Please parse PDFs first." });
+    }
+
+    if (!currentJobState.excelData) {
+      return res.status(400).json({ error: "No Excel data found. Please upload Excel first." });
+    }
+
+    // Perform table-to-table comparison
+    const reconciliationResult = reconcileTables(
+      currentJobState.pdfData.rows,
       currentJobState.excelData.rows,
-      results,
-      selectedHeaders,
+      mappings,
       matchKey
     );
 
-    // Cache final report in server state
+    // Add match values to records for exporter compatibility
+    reconciliationResult.records.forEach(r => {
+      r.pdfMatchValue = r.pdfRow[matchKey] || "";
+      const excelHeader = mappings[matchKey];
+      r.excelMatchValue = r.matchedExcelRow ? r.matchedExcelRow[excelHeader] || "" : "";
+    });
+
+    // Generate Executive Report via Claude
+    const executiveReport = await generateReconciliationExecutiveSummary(reconciliationResult, mappings);
+
+    // Cache results
     currentJobState.comparisonResults = {
-      report: finalReport,
-      selectedHeaders,
-      matchKey
+      report: reconciliationResult,
+      selectedHeaders: Object.keys(mappings),
+      matchKey: matchKey,
+      mappings,
+      executiveSummary: executiveReport
     };
 
-    // Send final results back to SSE client
-    sendProgressUpdate(clientId, {
-      status: "done",
-      message: "Processing completed successfully!",
-      data: finalReport
+    res.json({
+      success: true,
+      report: reconciliationResult,
+      executiveSummary: executiveReport
     });
-  } catch (err) {
-    console.error("Comparison reconciliation error:", err);
-    sendProgressUpdate(clientId, {
-      status: "error",
-      message: `Reconciliation failed: ${err.message}`
-    });
+  } catch (error) {
+    console.error("Reconciliation error:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 

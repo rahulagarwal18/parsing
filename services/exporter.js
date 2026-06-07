@@ -39,11 +39,12 @@ export function generateExcelReport(comparisonResult, selectedHeaders, matchKey)
   const detailRows = [detailHeaders];
 
   for (const record of comparisonResult.records) {
+    const keyValue = record.pdfMatchValue || (record.matchedExcelRow ? record.matchedExcelRow[matchKey] || "N/A" : "N/A");
     const row = [
       record.filename,
       record.status,
       record.excelRowIndex || "N/A",
-      record.matchedExcelRow ? record.matchedExcelRow[matchKey] || "N/A" : "N/A"
+      keyValue
     ];
 
     for (const h of selectedHeaders) {

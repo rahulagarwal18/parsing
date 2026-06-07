@@ -180,6 +180,160 @@ export function compareData(excelRows, pdfResults, selectedHeaders, matchKey) {
       totalUnmatchedExcelRows: unmatchedExcelRows.length
     },
     records,
+  };
+}
+
+/**
+ * Reconciles parsed PDF rows against Excel rows based on mapping definitions.
+ * 
+ * @param {Object[]} pdfRows - The records extracted from PDFs (array of objects)
+ * @param {Object[]} excelRows - The rows parsed from Excel (array of objects)
+ * @param {Object} mappings - Mapping of PDF Header -> Excel Header
+ * @param {string} matchKey - PDF header designated as the unique matching key
+ * @returns {Object} Comparison report containing stats, detailed records, and unmatched rows
+ */
+export function reconcileTables(pdfRows, excelRows, mappings, matchKey) {
+  const excelMatchKey = mappings[matchKey];
+  const pdfHeaders = Object.keys(mappings);
+  
+  const records = [];
+  let totalMatches = 0;
+  let totalMismatches = 0;
+  let totalNoExcelMatch = 0;
+
+  // Track Excel rows that have been matched
+  const matchedExcelRowIndices = new Set();
+
+  pdfRows.forEach((pdfRow, idx) => {
+    const filename = pdfRow.filename || `Record ${idx + 1}`;
+    const pdfMatchVal = pdfRow[matchKey];
+
+    // Find matching Excel row
+    let matchedRow = null;
+    let matchedRowIndex = -1;
+
+    if (pdfMatchVal !== undefined && pdfMatchVal !== null && String(pdfMatchVal).trim() !== "") {
+      matchedRowIndex = excelRows.findIndex(row => {
+        return valuesMatch(row[excelMatchKey], pdfMatchVal);
+      });
+      if (matchedRowIndex !== -1) {
+        matchedRow = excelRows[matchedRowIndex];
+        matchedExcelRowIndices.add(matchedRowIndex);
+      }
+    }
+
+    const fieldComparisons = {};
+    let isFullMatch = true;
+    let hasMismatch = false;
+    let hasMissing = false;
+
+    // We only compare if we matched a row
+    if (matchedRow) {
+      pdfHeaders.forEach(pdfHeader => {
+        const excelHeader = mappings[pdfHeader];
+        // If there's no mapping for a header, skip comparison on it
+        if (!excelHeader) {
+          fieldComparisons[pdfHeader] = {
+            excelHeader: "",
+            excelValue: "N/A (Not Mapped)",
+            pdfValue: pdfRow[pdfHeader] || "",
+            status: "MATCH"
+          };
+          return;
+        }
+
+        const excelVal = matchedRow[excelHeader] !== undefined ? matchedRow[excelHeader] : "";
+        const pdfVal = pdfRow[pdfHeader] !== undefined ? pdfRow[pdfHeader] : "";
+
+        const isMatch = valuesMatch(excelVal, pdfVal);
+        const isEmptyPdf = normalizeValue(pdfVal) === "";
+
+        let status = "MATCH";
+        if (!isMatch) {
+          if (isEmptyPdf) {
+            status = "MISSING_IN_PDF";
+            hasMissing = true;
+            isFullMatch = false;
+          } else {
+            status = "MISMATCH";
+            hasMismatch = true;
+            isFullMatch = false;
+          }
+        }
+
+        fieldComparisons[pdfHeader] = {
+          excelHeader: excelHeader,
+          excelValue: excelVal,
+          pdfValue: pdfVal,
+          status: status
+        };
+      });
+
+      let statusSummary = "FULL_MATCH";
+      if (hasMismatch) {
+        statusSummary = "MISMATCH";
+        totalMismatches++;
+      } else if (hasMissing) {
+        statusSummary = "PARTIAL_MATCH";
+        totalMatches++;
+      } else {
+        totalMatches++;
+      }
+
+      records.push({
+        filename,
+        pdfRowIndex: idx + 1,
+        excelRowIndex: matchedRowIndex + 2, // 1-based index, accounting for header row
+        matchedExcelRow: matchedRow,
+        pdfRow: pdfRow,
+        status: statusSummary,
+        fields: fieldComparisons
+      });
+    } else {
+      // No match found in Excel
+      totalNoExcelMatch++;
+      pdfHeaders.forEach(pdfHeader => {
+        fieldComparisons[pdfHeader] = {
+          excelHeader: mappings[pdfHeader] || "",
+          excelValue: "N/A (No Row Match)",
+          pdfValue: pdfRow[pdfHeader] || "",
+          status: "NO_EXCEL_MATCH"
+        };
+      });
+
+      records.push({
+        filename,
+        pdfRowIndex: idx + 1,
+        excelRowIndex: null,
+        matchedExcelRow: null,
+        pdfRow: pdfRow,
+        status: "NO_EXCEL_MATCH",
+        fields: fieldComparisons
+      });
+    }
+  });
+
+  // Collect unmatched Excel rows
+  const unmatchedExcelRows = [];
+  excelRows.forEach((row, idx) => {
+    if (!matchedExcelRowIndices.has(idx)) {
+      unmatchedExcelRows.push({
+        excelRowIndex: idx + 2,
+        data: row
+      });
+    }
+  });
+
+  return {
+    summary: {
+      totalPdfsProcessed: pdfRows.length,
+      totalMatches,
+      totalMismatches,
+      totalNoExcelMatch,
+      totalUnmatchedExcelRows: unmatchedExcelRows.length
+    },
+    records,
     unmatchedExcelRows
   };
 }
+

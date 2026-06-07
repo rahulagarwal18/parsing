@@ -50,17 +50,17 @@
     <div class="stepper-container">
       <div class="step active" id="step-nav-1">
         <div class="step-num">1</div>
-        <div class="step-label">Upload Excel</div>
+        <div class="step-label">Upload PDFs</div>
       </div>
       <div class="step-line"></div>
       <div class="step" id="step-nav-2">
         <div class="step-num">2</div>
-        <div class="step-label">Configure Columns</div>
+        <div class="step-label">Parsed PDF Results</div>
       </div>
       <div class="step-line"></div>
       <div class="step" id="step-nav-3">
         <div class="step-num">3</div>
-        <div class="step-label">Parse PDFs</div>
+        <div class="step-label">Upload Excel & Map</div>
       </div>
       <div class="step-line"></div>
       <div class="step" id="step-nav-4">
@@ -72,106 +72,16 @@
     <!-- Active Card Display Panel -->
     <section class="card-display-area">
       
-      <!-- STEP 1: Upload Excel/PDF Master File -->
+      <!-- STEP 1: Upload PDFs -->
       <div class="setup-card active" id="panel-step-1">
-        <div class="card-header">
-          <i data-lucide="file-spreadsheet" class="card-icon excel-theme"></i>
-          <div>
-            <h2>Upload Master Data Sheet</h2>
-            <p>Upload the master Excel spreadsheet or PDF document containing records you want to cross-reference.</p>
-          </div>
-        </div>
-        
-        <div class="drop-zone" id="excel-drop-zone">
-          <input type="file" id="excel-input" accept=".xlsx, .xls, .pdf" style="display: none;">
-          <i data-lucide="upload-cloud" class="upload-icon"></i>
-          <p class="drop-text">Drag & drop your Excel or PDF file here or <span class="browse-btn">browse files</span></p>
-          <p class="file-limits">Supports .xlsx, .xls, .pdf up to 20MB</p>
-        </div>
-
-        <div class="selected-file-banner" id="excel-file-banner" style="display: none;">
-          <div class="file-info">
-            <i data-lucide="file-text" class="file-icon"></i>
-            <span class="file-name" id="excel-file-name">master_invoices.xlsx</span>
-            <span class="file-size" id="excel-file-size">45 KB</span>
-          </div>
-          <button class="remove-file-btn" id="remove-excel-btn"><i data-lucide="x"></i></button>
-        </div>
-
-        <div class="preview-area" id="excel-preview-area" style="display: none;">
-          <h3>Data Preview (First 5 Rows)</h3>
-          <div class="table-scroll">
-            <table id="excel-preview-table"></table>
-          </div>
-        </div>
-
-        <div class="action-footer">
-          <button class="primary-btn next-btn" id="btn-goto-step2" disabled>
-            Continue to Configuration <i data-lucide="arrow-right"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- STEP 2: Configure Columns -->
-      <div class="setup-card" id="panel-step-2">
-        <div class="card-header">
-          <i data-lucide="settings-2" class="card-icon config-theme"></i>
-          <div>
-            <h2>Configure Reconciliation Fields</h2>
-            <p>Select which columns from your Excel sheet should be extracted and compared with the PDF documents.</p>
-          </div>
-        </div>
-
-        <div class="config-grid">
-          <div class="config-col">
-            <h3>1. Comparison Headers</h3>
-            <p class="section-help">Choose all the fields you want to match between the PDF and the spreadsheet.</p>
-            <div class="badge-selector-grid" id="headers-selector">
-              <!-- Dynamically populated badges -->
-            </div>
-          </div>
-          
-          <div class="config-col">
-            <h3>2. Unique Matching Key</h3>
-            <p class="section-help">Choose the primary column used to identify and pair each PDF with its corresponding spreadsheet row (e.g. Invoice #, ID, PO Number).</p>
-            <div class="select-wrapper">
-              <select id="match-key-select">
-                <option value="" disabled selected>Select unique matching key...</option>
-              </select>
-              <i data-lucide="chevron-down" class="select-chevron"></i>
-            </div>
-          </div>
-
-          <div class="config-col" style="grid-column: span 2; margin-top: 20px;">
-            <h3>3. Custom Instructions / Prompt (Optional)</h3>
-            <p class="section-help">Guide the AI with specific matching or extraction instructions (e.g. "The Excel 'Vendor Name' corresponds to 'Supplier' in the PDFs", "Ignore the sub-header billing details, match only the grand totals").</p>
-            <div class="textarea-wrapper">
-              <textarea id="custom-prompt-input" rows="3" placeholder="Enter custom prompt instructions for the AI matching engine..."></textarea>
-            </div>
-          </div>
-        </div>
-
-        <div class="action-footer">
-          <button class="secondary-btn back-btn" id="btn-back-to-step1">
-            <i data-lucide="arrow-left"></i> Change Master File
-          </button>
-          <button class="primary-btn next-btn" id="btn-goto-step3" disabled>
-            Set Comparison Rules <i data-lucide="arrow-right"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- STEP 3: Upload PDFs & Process -->
-      <div class="setup-card" id="panel-step-3">
         <div class="card-header">
           <i data-lucide="file-search" class="card-icon pdf-theme"></i>
           <div>
             <h2>Upload PDF Documents</h2>
-            <p>Upload the documents you wish to reconcile. You can upload up to 200 PDFs at once.</p>
+            <p>Upload the target PDF documents you wish to audit (such as invoices, bank statements, or receipts). Supports up to 200 PDFs.</p>
           </div>
         </div>
 
-        <!-- PDF Upload Form -->
         <div class="upload-section-group" id="pdf-upload-group">
           <div class="drop-zone" id="pdf-drop-zone">
             <input type="file" id="pdf-input" accept=".pdf" multiple style="display: none;">
@@ -191,11 +101,8 @@
           </div>
 
           <div class="action-footer">
-            <button class="secondary-btn back-btn" id="btn-back-to-step2">
-              <i data-lucide="arrow-left"></i> Back to Config
-            </button>
             <button class="primary-btn start-pipeline-btn" id="btn-run-pipeline" disabled>
-              <i data-lucide="play-circle"></i> Start Reconciliation Pipeline
+              <i data-lucide="play-circle"></i> Start PDF Parsing
             </button>
           </div>
         </div>
@@ -214,7 +121,6 @@
             <div class="progress-bar-fill" id="progress-bar-fill"></div>
           </div>
 
-          <!-- Console-like logging panel -->
           <div class="console-panel">
             <div class="console-header">
               <div class="console-dots">
@@ -225,9 +131,118 @@
               <span class="console-title">Pipeline Activity Log</span>
             </div>
             <div class="console-logs" id="console-logs">
-              <div class="log-line system">[SYSTEM] Ready to start pipeline.</div>
+              <div class="log-line system">[SYSTEM] Ready to start parsing.</div>
             </div>
           </div>
+          
+          <div class="action-footer" style="margin-top: 20px;">
+            <button class="primary-btn next-btn" id="btn-goto-step2" style="display: none;">
+              View Parsed Results <i data-lucide="arrow-right"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: Parsed PDF Results -->
+      <div class="setup-card" id="panel-step-2">
+        <div class="card-header">
+          <i data-lucide="table" class="card-icon config-theme"></i>
+          <div>
+            <h2>Parsed PDF Records</h2>
+            <p>Review the structured data fields automatically discovered and extracted from your PDFs.</p>
+          </div>
+        </div>
+
+        <div class="preview-area" id="pdf-parsed-preview-area">
+          <h3>Extracted Records Table</h3>
+          <div class="table-scroll">
+            <table class="report-data-table" id="pdf-parsed-table">
+              <thead>
+                <!-- Populated dynamically with detected headers -->
+              </thead>
+              <tbody>
+                <!-- Populated dynamically with rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="action-footer">
+          <button class="secondary-btn back-btn" id="btn-back-to-step1">
+            <i data-lucide="arrow-left"></i> Re-upload PDFs
+          </button>
+          <button class="primary-btn next-btn" id="btn-goto-step3">
+            Continue to Excel Upload <i data-lucide="arrow-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Upload Excel & Map Columns -->
+      <div class="setup-card" id="panel-step-3">
+        <div class="card-header">
+          <i data-lucide="file-spreadsheet" class="card-icon excel-theme"></i>
+          <div>
+            <h2>Upload Excel Sheet & Configure Mappings</h2>
+            <p>Upload the master spreadsheet containing records to compare, then pair the columns of the Excel with the PDF fields.</p>
+          </div>
+        </div>
+
+        <div class="drop-zone" id="excel-drop-zone">
+          <input type="file" id="excel-input" accept=".xlsx, .xls" style="display: none;">
+          <i data-lucide="upload-cloud" class="upload-icon"></i>
+          <p class="drop-text">Drag & drop your Excel file here or <span class="browse-btn">browse files</span></p>
+          <p class="file-limits">Supports .xlsx, .xls up to 20MB</p>
+        </div>
+
+        <div class="selected-file-banner" id="excel-file-banner" style="display: none;">
+          <div class="file-info">
+            <i data-lucide="file-text" class="file-icon"></i>
+            <span class="file-name" id="excel-file-name">master_invoices.xlsx</span>
+            <span class="file-size" id="excel-file-size">0 KB</span>
+          </div>
+          <button class="remove-file-btn" id="remove-excel-btn"><i data-lucide="x"></i></button>
+        </div>
+
+        <div class="preview-area" id="excel-preview-area" style="display: none; margin-bottom: 25px;">
+          <h3>Excel Data Preview (First 5 Rows)</h3>
+          <div class="table-scroll">
+            <table id="excel-preview-table"></table>
+          </div>
+        </div>
+
+        <div class="mapping-container" id="mapping-container" style="display: none;">
+          <div class="mapping-header-row">
+            <h3>Field Configuration Mappings</h3>
+            <button class="secondary-btn" id="btn-ai-auto-map">
+              <i data-lucide="wand-2"></i> Auto-Map Columns via AI
+            </button>
+          </div>
+          
+          <p class="section-help">Specify which Excel spreadsheet column corresponds to each dynamically extracted PDF field.</p>
+          
+          <div class="mapping-grid" id="mapping-grid">
+            <!-- Dynamic dropdown mapping pairs -->
+          </div>
+
+          <div class="match-key-col" style="margin-top: 25px; max-width: 400px;">
+            <h3>Unique Matching Key</h3>
+            <p class="section-help">Choose the primary field used to match PDF records with Excel rows (e.g. Invoice ID).</p>
+            <div class="select-wrapper">
+              <select id="match-key-select">
+                <option value="" disabled selected>Select unique matching key...</option>
+              </select>
+              <i data-lucide="chevron-down" class="select-chevron"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-footer" style="margin-top: 30px;">
+          <button class="secondary-btn back-btn" id="btn-back-to-step2">
+            <i data-lucide="arrow-left"></i> Back to parsed PDFs
+          </button>
+          <button class="primary-btn start-pipeline-btn" id="btn-run-reconciliation" disabled>
+            <i data-lucide="check-check"></i> Run Reconciliation
+          </button>
         </div>
       </div>
 
@@ -247,7 +262,7 @@
             <div class="stat-icon-bg gray"><i data-lucide="files"></i></div>
             <div class="stat-info">
               <span class="stat-value" id="stat-total-processed">0</span>
-              <span class="stat-label">Total PDFs</span>
+              <span class="stat-label">PDF Records</span>
             </div>
           </div>
 
@@ -255,7 +270,7 @@
             <div class="stat-icon-bg green"><i data-lucide="check-circle-2"></i></div>
             <div class="stat-info">
               <span class="stat-value" id="stat-matches">0</span>
-              <span class="stat-label">Matches</span>
+              <span class="stat-label">Matched Records</span>
             </div>
           </div>
 
@@ -271,7 +286,7 @@
             <div class="stat-icon-bg purple"><i data-lucide="help-circle"></i></div>
             <div class="stat-info">
               <span class="stat-value" id="stat-no-match">0</span>
-              <span class="stat-label">Excel Row Unmatched</span>
+              <span class="stat-label">Unmatched Excel</span>
             </div>
           </div>
         </div>
@@ -289,6 +304,18 @@
             <a class="export-btn word" id="export-word-btn" href="#">
               <i data-lucide="file-text"></i> Download Word Report
             </a>
+          </div>
+        </div>
+
+        <!-- Executive Summary Section -->
+        <div class="executive-summary-section" style="margin-top: 30px; margin-bottom: 30px;">
+          <h3>AI Executive Reconciliation Report</h3>
+          <p class="section-help">An auditor-style executive summary generated dynamically by Claude.</p>
+          <div class="executive-report-box" id="executive-report-content" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 25px; min-height: 100px; color: #e2e8f0; line-height: 1.6; font-size: 15px;">
+            <div style="display: flex; align-items: center; gap: 10px; color: #a0aec0;">
+              <div class="loading-spinner" style="width: 20px; height: 20px; border-width: 2px;"></div>
+              <span>Generating auditor executive report via Claude...</span>
+            </div>
           </div>
         </div>
 

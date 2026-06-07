@@ -286,3 +286,151 @@ ${markdownText}
     throw new Error(`Failed to extract structured data from PDF via Claude: ${error.message}`);
   }
 }
+
+/**
+ * Inspects parsed markdown text and dynamically discovers 4 to 6 key headers.
+ */
+export async function detectSchemaFromMarkdown(markdown) {
+  const prompt = `
+You are an expert data architect. Your task is to inspect the parsed text/markdown of a financial/transactional document (such as an invoice, receipt, bank statement, or transaction log) and identify the 4 to 6 most important, common field headers that should be extracted from this document to represent its records (e.g. Invoice ID, Date, Total Amount, Customer Name, Vendor Name, Quantity, Description, etc.).
+Do not include metadata like file headers or system timestamps. Focus on headers that would be useful for comparison in a spreadsheet.
+
+Return a JSON array of strings containing ONLY the detected field headers (between 4 and 6 headers).
+For example: ["Invoice ID", "Date", "Total Amount", "Customer Name"]
+`;
+
+  const responseSchema = {
+    type: "array",
+    items: { type: "string" },
+    description: "List of 4 to 6 key headers detected in the document."
+  };
+
+  try {
+    const promptWithText = `${prompt}\n\nDocument Text:\n---\n${markdown.substring(0, 8000)}\n---`;
+    return await callClaude(promptWithText, responseSchema, "detect_schema");
+  } catch (error) {
+    console.error("Claude schema detection error:", error);
+    // Return a default schema if it fails
+    return ["Invoice ID", "Date", "Amount", "Vendor"];
+  }
+}
+
+/**
+ * Maps PDF headers to Excel headers automatically using Claude.
+ */
+export async function generateAutoMapping(pdfHeaders, excelHeaders) {
+  const prompt = `
+You are a database integration helper. Your task is to automatically map columns from a parsed PDF dataset (pdfHeaders) to columns in a spreadsheet dataset (excelHeaders) based on name similarity and semantic meaning.
+
+For each PDF header in the list, identify the single best matching Excel header. If there is no reasonable match, map it to an empty string "".
+Do not invent Excel headers. Only select from the provided excelHeaders list or empty string.
+
+PDF Headers:
+${JSON.stringify(pdfHeaders)}
+
+Excel Headers:
+${JSON.stringify(excelHeaders)}
+
+Return a JSON object mapping each PDF header to the matching Excel header.
+For example: {"Invoice ID": "Invoice No", "Date": "Billing Date", "Total Amount": ""}
+`;
+
+  const responseSchema = {
+    type: "object",
+    additionalProperties: { type: "string" },
+    description: "Mapping of PDF headers to Excel headers."
+  };
+
+  try {
+    return await callClaude(prompt, responseSchema, "auto_map_columns");
+  } catch (error) {
+    console.error("Claude auto column mapping error:", error);
+    // Return a simple manual fallback: match case-insensitive names
+    const mapping = {};
+    for (const pdfH of pdfHeaders) {
+      const match = excelHeaders.find(eh => eh.toLowerCase().trim() === pdfH.toLowerCase().trim());
+      mapping[pdfH] = match || "";
+    }
+    return mapping;
+  }
+}
+
+/**
+ * Generates a professional financial auditor-style Executive Reconciliation Report in Markdown.
+ */
+export async function generateReconciliationExecutiveSummary(comparisonResult, mappings) {
+  const summary = comparisonResult.summary;
+  const mismatches = comparisonResult.records
+    .filter(r => r.status === "MISMATCH")
+    .slice(0, 10) // pass a sample of up to 10 mismatches
+    .map(r => {
+      const diffs = [];
+      for (const key of Object.keys(r.fields)) {
+        const field = r.fields[key];
+        if (field.status === "MISMATCH") {
+          diffs.push(`- ${key}: PDF has "${field.pdfValue}", Excel has "${field.excelValue}"`);
+        }
+      }
+      return `PDF Record Index ${r.pdfRowIndex} (Key Value: ${r.pdfRow ? r.pdfRow[Object.keys(mappings)[0]] || "N/A" : "N/A"}):\n${diffs.join("\n")}`;
+    });
+
+  const prompt = `
+You are a senior financial auditor and data analyst. Write a professional, comprehensive Executive Reconciliation Report based on the following comparison results between a parsed PDF document and an Excel ledger sheet.
+
+Reconciliation Summary:
+- Total PDF Records parsed: ${summary.totalPdfsProcessed}
+- Fully/Partially Matched Records: ${summary.totalMatches}
+- Mismatching Records: ${summary.totalMismatches}
+- PDF Records with No Excel Row Match: ${summary.totalNoExcelMatch}
+- Excel Rows with No PDF Match: ${summary.totalUnmatchedExcelRows}
+
+Mappings Used (PDF -> Excel):
+${JSON.stringify(mappings, null, 2)}
+
+Sample Mismatch Details:
+${mismatches.length > 0 ? mismatches.join("\n\n") : "No field-level mismatches found!"}
+
+Please write the report in Markdown. Use a professional, clean, corporate tone suitable for senior executives at MultiBank Group. Include the following sections:
+1. Executive Summary: High-level overview of the audit status and overall reconciliation rate.
+2. Key Findings: Detail major findings, discrepancy count, and unmatched records. Include a brief summary of why mismatches occurred (e.g. formatting differences, pricing variances).
+3. Action Items: Clear, bulleted list of recommended next steps to resolve the discrepancies.
+4. Audit Status: A clean, distinct status badge/section (e.g., PASSED, REVIEW REQUIRED, or CRITICAL DISCREPANCIES FOUND).
+
+Keep lines relatively short and format beautifully. Do not include any meta-text outside of the Markdown report itself.
+`;
+
+  const responseSchema = {
+    type: "object",
+    properties: {
+      reportMarkdown: {
+        type: "string",
+        description: "The complete reconciliation executive report formatted in standard Markdown."
+      }
+    },
+    required: ["reportMarkdown"]
+  };
+
+  try {
+    const result = await callClaude(prompt, responseSchema, "generate_executive_summary");
+    return result.reportMarkdown;
+  } catch (error) {
+    console.error("Claude executive summary generation error:", error);
+    return `
+# Executive Reconciliation Report
+
+**Date:** ${new Date().toLocaleDateString()}
+**Status:** AUDIT COMPLETED (Error generating summary via AI)
+
+## 1. Executive Summary
+The reconciliation process has completed.
+- Total PDF Records parsed: ${summary.totalPdfsProcessed}
+- Fully/Partially Matched Records: ${summary.totalMatches}
+- Mismatching Records: ${summary.totalMismatches}
+- PDF Records with No Excel Row Match: ${summary.totalNoExcelMatch}
+- Excel Rows with No PDF Match: ${summary.totalUnmatchedExcelRows}
+
+Please review the discrepancy details in the grid below.
+`;
+  }
+}
+

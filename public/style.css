@@ -1438,3 +1438,107 @@ textarea:focus {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Mapping Layouts */
+.mapping-container {
+  margin-top: 35px;
+  padding-top: 25px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mapping-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.mapping-row {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 12px 20px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.mapping-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(56, 189, 248, 0.2);
+}
+
+.pdf-field-tag {
+  background: rgba(56, 189, 248, 0.08);
+  color: var(--cyan);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: 13px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  display: inline-block;
+  letter-spacing: 0.2px;
+}
+
+/* AI Executive Summary Markdown Styling */
+.executive-report-box h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 25px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 6px;
+}
+
+.executive-report-box h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cyan);
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
+
+.executive-report-box h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--cyan);
+  margin-top: 15px;
+  margin-bottom: 10px;
+}
+
+.executive-report-box p {
+  margin-bottom: 15px;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.executive-report-box ul {
+  margin-bottom: 20px;
+  padding-left: 20px;
+}
+
+.executive-report-box li {
+  margin-bottom: 8px;
+  color: #e2e8f0;
+}
+
+.executive-report-box blockquote {
+  border-left: 4px solid var(--cyan);
+  background: rgba(56, 189, 248, 0.04);
+  padding: 15px 20px;
+  margin: 15px 0;
+  border-radius: 4px;
+  font-style: italic;
+  color: #e2e8f0;
+}
+
+.executive-report-box code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  color: var(--cyan);
+}
+

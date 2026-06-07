@@ -4,13 +4,16 @@ const clientId = 'client-' + Math.random().toString(36).substring(2, 15);
 // State Management
 let appState = {
   currentStep: 1,
+  pdfFiles: [],
+  pdfHeaders: [],
+  pdfRows: [],
   excelFile: null,
   excelHeaders: [],
   excelPreview: [],
-  selectedHeaders: [],
-  matchKey: '',
-  pdfFiles: [],
-  comparisonReport: null
+  mappings: {}, // { [pdfHeader]: excelHeader }
+  matchKey: '', // pdfHeader
+  comparisonReport: null,
+  executiveSummary: ''
 };
 
 // DOM Elements
@@ -28,7 +31,7 @@ const panels = [
   document.getElementById('panel-step-4')
 ];
 
-// Initialise Lucide icons
+// Initialise Lucide icons and app controllers
 document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
   setupEventListeners();
@@ -38,8 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // Setup SSE Progress Listener
 let sseSource = null;
 function initSSE() {
-  const protocol = window.location.protocol;
-  const host = window.location.host;
   sseSource = new EventSource(`/api/progress-stream?clientId=${clientId}`);
 
   sseSource.onmessage = (event) => {
@@ -52,62 +53,14 @@ function initSSE() {
   };
 }
 
-// Event Listeners
+// Event Listeners setup
 function setupEventListeners() {
-  // Step 1: Excel Upload Drag & Drop
-  const excelDropZone = document.getElementById('excel-drop-zone');
-  const excelInput = document.getElementById('excel-input');
-  const removeExcelBtn = document.getElementById('remove-excel-btn');
-  const btnGotoStep2 = document.getElementById('btn-goto-step2');
-
-  excelDropZone.addEventListener('click', () => excelInput.click());
-  excelDropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    excelDropZone.classList.add('dragover');
-  });
-  excelDropZone.addEventListener('dragleave', () => excelDropZone.classList.remove('dragover'));
-  excelDropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    excelDropZone.classList.remove('dragover');
-    if (e.dataTransfer.files.length > 0) {
-      handleExcelFileSelect(e.dataTransfer.files[0]);
-    }
-  });
-
-  excelInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-      handleExcelFileSelect(e.target.files[0]);
-    }
-  });
-
-  removeExcelBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    resetExcelUpload();
-  });
-
-  btnGotoStep2.addEventListener('click', () => {
-    goToStep(2);
-  });
-
-  // Step 2: Config Panel
-  const btnBackToStep1 = document.getElementById('btn-back-to-step1');
-  const btnGotoStep3 = document.getElementById('btn-goto-step3');
-  const matchKeySelect = document.getElementById('match-key-select');
-
-  btnBackToStep1.addEventListener('click', () => goToStep(1));
-  btnGotoStep3.addEventListener('click', () => goToStep(3));
-
-  matchKeySelect.addEventListener('change', (e) => {
-    appState.matchKey = e.target.value;
-    validateStep2();
-  });
-
-  // Step 3: PDF Upload Drag & Drop
+  // --- STEP 1: PDF Upload & Parsing ---
   const pdfDropZone = document.getElementById('pdf-drop-zone');
   const pdfInput = document.getElementById('pdf-input');
   const clearPdfsBtn = document.getElementById('clear-pdfs-btn');
-  const btnBackToStep2 = document.getElementById('btn-back-to-step2');
   const btnRunPipeline = document.getElementById('btn-run-pipeline');
+  const btnGotoStep2 = document.getElementById('btn-goto-step2');
 
   pdfDropZone.addEventListener('click', () => pdfInput.click());
   pdfDropZone.addEventListener('dragover', (e) => {
@@ -134,25 +87,85 @@ function setupEventListeners() {
     updatePdfListUI();
   });
 
-  btnBackToStep2.addEventListener('click', () => goToStep(2));
-  btnRunPipeline.addEventListener('click', startPipeline);
+  btnRunPipeline.addEventListener('click', startPdfParsing);
+  btnGotoStep2.addEventListener('click', () => goToStep(2));
 
-  // Step 4: Report Results & Actions
+  // --- STEP 2: Parsed PDF Preview ---
+  const btnBackToStep1 = document.getElementById('btn-back-to-step1');
+  const btnGotoStep3 = document.getElementById('btn-goto-step3');
+
+  btnBackToStep1.addEventListener('click', () => {
+    // Confirm go back
+    if (confirm("Are you sure you want to go back? Current parsed PDF data will be reset.")) {
+      resetPdfParsing();
+      goToStep(1);
+    }
+  });
+
+  btnGotoStep3.addEventListener('click', () => {
+    goToStep(3);
+  });
+
+  // --- STEP 3: Excel Upload & Mapping ---
+  const excelDropZone = document.getElementById('excel-drop-zone');
+  const excelInput = document.getElementById('excel-input');
+  const removeExcelBtn = document.getElementById('remove-excel-btn');
+  const btnBackToStep2 = document.getElementById('btn-back-to-step2');
+  const btnAiAutoMap = document.getElementById('btn-ai-auto-map');
+  const matchKeySelect = document.getElementById('match-key-select');
+  const btnRunReconciliation = document.getElementById('btn-run-reconciliation');
+
+  excelDropZone.addEventListener('click', () => excelInput.click());
+  excelDropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    excelDropZone.classList.add('dragover');
+  });
+  excelDropZone.addEventListener('dragleave', () => excelDropZone.classList.remove('dragover'));
+  excelDropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    excelDropZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+      handleExcelFileSelect(e.dataTransfer.files[0]);
+    }
+  });
+
+  excelInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      handleExcelFileSelect(e.target.files[0]);
+    }
+  });
+
+  removeExcelBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    resetExcelUpload();
+  });
+
+  btnBackToStep2.addEventListener('click', () => goToStep(2));
+
+  btnAiAutoMap.addEventListener('click', runAiAutoMapping);
+
+  matchKeySelect.addEventListener('change', (e) => {
+    appState.matchKey = e.target.value;
+    validateReconciliationTrigger();
+  });
+
+  btnRunReconciliation.addEventListener('click', runReconciliation);
+
+  // --- STEP 4: Reporting & Reset ---
   const btnRestartApp = document.getElementById('btn-restart-app');
   const searchInput = document.getElementById('result-search-input');
   const statusFilter = document.getElementById('status-filter-select');
 
   btnRestartApp.addEventListener('click', restartApplication);
-  
   searchInput.addEventListener('input', filterReportTable);
   statusFilter.addEventListener('change', filterReportTable);
 }
 
-// Navigation flow helper
+// Stepper navigation flow helper
 function goToStep(stepNumber) {
   appState.currentStep = stepNumber;
 
-  // Update Stepper Nav
+  // Update Stepper Navigation Status
   stepNavs.forEach((nav, idx) => {
     const navStep = idx + 1;
     nav.classList.remove('active', 'completed');
@@ -163,7 +176,7 @@ function goToStep(stepNumber) {
     }
   });
 
-  // Update panels
+  // Toggle active card panels
   panels.forEach((panel, idx) => {
     panel.classList.remove('active');
     if (idx + 1 === stepNumber) {
@@ -171,263 +184,18 @@ function goToStep(stepNumber) {
     }
   });
 
-  // Scroll to top of panel smoothly
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// --- STEP 1: EXCEL & PDF MASTER HANDLERS ---
-function handleExcelFileSelect(file) {
-  const isPdf = file.name.toLowerCase().endsWith('.pdf');
-  if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls') && !isPdf) {
-    alert("Please upload a valid Excel spreadsheet (.xlsx or .xls) or PDF document (.pdf)");
-    return;
-  }
-  
-  appState.excelFile = file;
-  
-  // Show file details
-  document.getElementById('excel-file-name').innerText = file.name;
-  document.getElementById('excel-file-size').innerText = formatBytes(file.size);
-  document.getElementById('excel-drop-zone').style.display = 'none';
-  document.getElementById('excel-file-banner').style.display = 'flex';
-
-  // Upload to API immediately to extract headers and preview
-  if (isPdf) {
-    uploadPdfMasterToServer(file);
-  } else {
-    uploadExcelToServer(file);
-  }
-}
-
-function resetExcelUpload() {
-  appState.excelFile = null;
-  appState.excelHeaders = [];
-  appState.excelPreview = [];
-  appState.selectedHeaders = [];
-  appState.matchKey = '';
-
-  document.getElementById('excel-drop-zone').style.display = 'flex';
-  document.getElementById('excel-file-banner').style.display = 'none';
-  document.getElementById('excel-preview-area').style.display = 'none';
-  document.getElementById('btn-goto-step2').disabled = true;
-
-  document.getElementById('excel-input').value = '';
-}
-
-async function uploadPdfMasterToServer(file) {
-  const formData = new FormData();
-  formData.append('pdfMasterFile', file);
-
-  try {
-    // Show spinner/progress or loading text in preview area
-    document.getElementById('excel-preview-area').style.display = 'block';
-    const previewTable = document.getElementById('excel-preview-table');
-    previewTable.innerHTML = `<tr><td style="text-align:center; padding: 40px; color: var(--text-muted);">
-      <div class="loading-spinner"></div>
-      <div style="margin-top: 15px; font-weight: 500;">Parsing master PDF and extracting table records via LlamaParse & Gemini...</div>
-      <div style="font-size: 11px; margin-top: 6px; opacity: 0.8;">This takes a moment as we digitize the PDF structure.</div>
-    </td></tr>`;
-
-    const res = await fetch('/api/upload-pdf-master', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to parse master PDF');
-    }
-
-    const data = await res.json();
-    appState.excelHeaders = data.headers;
-    appState.excelPreview = data.preview;
-
-    // Populated header configuration layout (Step 2)
-    populateStep2Config();
-    
-    // Render preview
-    renderExcelPreviewTable();
-
-    document.getElementById('btn-goto-step2').disabled = false;
-  } catch (error) {
-    alert("Error loading master PDF: " + error.message);
-    resetExcelUpload();
-  }
-}
-
-async function uploadExcelToServer(file) {
-  const formData = new FormData();
-  formData.append('excelFile', file);
-
-  try {
-    // Show spinner/progress or loading text in preview area
-    document.getElementById('excel-preview-area').style.display = 'block';
-    const previewTable = document.getElementById('excel-preview-table');
-    previewTable.innerHTML = `<tr><td style="text-align:center; padding: 30px;">Reading spreadsheet structure...</td></tr>`;
-
-    const res = await fetch('/api/upload-excel', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to upload spreadsheet');
-    }
-
-    const data = await res.json();
-    appState.excelHeaders = data.headers;
-    appState.excelPreview = data.preview;
-
-    // Populated header configuration layout (Step 2)
-    populateStep2Config();
-    
-    // Render Excel preview
-    renderExcelPreviewTable();
-
-    document.getElementById('btn-goto-step2').disabled = false;
-  } catch (error) {
-    alert("Error loading Excel file: " + error.message);
-    resetExcelUpload();
-  }
-}
-
-function renderExcelPreviewTable() {
-  const table = document.getElementById('excel-preview-table');
-  table.innerHTML = '';
-
-  if (appState.excelHeaders.length === 0 || appState.excelPreview.length === 0) {
-    return;
-  }
-
-  // Create header
-  const thead = document.createElement('thead');
-  const headerRow = document.createElement('tr');
-  appState.excelHeaders.forEach(h => {
-    const th = document.createElement('th');
-    th.innerText = h;
-    headerRow.appendChild(th);
-  });
-  thead.appendChild(headerRow);
-  table.appendChild(thead);
-
-  // Create body
-  const tbody = document.createElement('tbody');
-  appState.excelPreview.forEach(row => {
-    const tr = document.createElement('tr');
-    appState.excelHeaders.forEach(h => {
-      const td = document.createElement('td');
-      td.innerText = row[h] !== undefined ? row[h] : '';
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-}
-
-// --- STEP 2: CONFIGURATION HANDLERS ---
-function populateStep2Config() {
-  const headersSelector = document.getElementById('headers-selector');
-  const matchKeySelect = document.getElementById('match-key-select');
-
-  headersSelector.innerHTML = '';
-  // Clear select dropdown except default template option
-  matchKeySelect.innerHTML = '<option value="" disabled selected>Select unique matching key...</option>';
-
-  // Default select all headers for comparison
-  appState.selectedHeaders = [...appState.excelHeaders];
-
-  appState.excelHeaders.forEach(header => {
-    // 1. Create Badge item
-    const badge = document.createElement('div');
-    badge.className = 'field-badge selected';
-    badge.dataset.header = header;
-    badge.innerHTML = `<i data-lucide="check" class="badge-icon"></i> ${header}`;
-    
-    badge.addEventListener('click', () => {
-      toggleHeaderSelection(badge, header);
-    });
-
-    headersSelector.appendChild(badge);
-
-    // 2. Add as option to unique match key select dropdown
-    const option = document.createElement('option');
-    option.value = header;
-    option.innerText = header;
-    matchKeySelect.appendChild(option);
-  });
-
-  // Re-initialise Lucide icons inside badges
-  lucide.createIcons();
-
-  validateStep2();
-}
-
-function toggleHeaderSelection(badgeElement, header) {
-  const idx = appState.selectedHeaders.indexOf(header);
-  if (idx !== -1) {
-    // Don't deselect the match key if already chosen
-    if (header === appState.matchKey) {
-      alert("You cannot deselect the matching key. Choose a different match key first.");
-      return;
-    }
-    appState.selectedHeaders.splice(idx, 1);
-    badgeElement.classList.remove('selected');
-    badgeElement.querySelector('i').setAttribute('data-lucide', 'plus');
-  } else {
-    appState.selectedHeaders.push(header);
-    badgeElement.classList.add('selected');
-    badgeElement.querySelector('i').setAttribute('data-lucide', 'check');
-  }
-
-  // Update icons dynamically
-  lucide.createIcons();
-  
-  // Update matching key list: only allow chosen comparison headers to be the matching key
-  updateMatchKeyOptions();
-  validateStep2();
-}
-
-function updateMatchKeyOptions() {
-  const matchKeySelect = document.getElementById('match-key-select');
-  const previousVal = appState.matchKey;
-  
-  matchKeySelect.innerHTML = '<option value="" disabled>Select unique matching key...</option>';
-  
-  appState.selectedHeaders.forEach(header => {
-    const option = document.createElement('option');
-    option.value = header;
-    option.innerText = header;
-    if (header === previousVal) {
-      option.selected = true;
-    }
-    matchKeySelect.appendChild(option);
-  });
-
-  // If previous match key is no longer in selected headers, reset it
-  if (!appState.selectedHeaders.includes(previousVal)) {
-    appState.matchKey = '';
-    matchKeySelect.value = '';
-  }
-}
-
-function validateStep2() {
-  const btnGotoStep3 = document.getElementById('btn-goto-step3');
-  // Match key is mandatory and must be in selected headers list
-  const isValid = appState.matchKey && appState.selectedHeaders.includes(appState.matchKey);
-  btnGotoStep3.disabled = !isValid;
-}
-
-// --- STEP 3: PDF HANDLERS ---
+// --- STEP 1: PDF BATCH HANDLERS ---
 function handlePdfFilesSelect(files) {
-  const validPdfs = Array.from(files).filter(f => f.name.endsWith('.pdf'));
+  const validPdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
 
   if (validPdfs.length === 0) {
     alert("Please select valid PDF documents.");
     return;
   }
 
-  // Ensure total files does not exceed limit
   const currentCount = appState.pdfFiles.length;
   const newCount = validPdfs.length;
 
@@ -436,7 +204,6 @@ function handlePdfFilesSelect(files) {
     return;
   }
 
-  // Add files to state (de-duplicate by name if necessary)
   validPdfs.forEach(file => {
     if (!appState.pdfFiles.some(f => f.name === file.name)) {
       appState.pdfFiles.push(file);
@@ -475,7 +242,8 @@ function updatePdfListUI() {
       <button class="remove-file-btn"><i data-lucide="x"></i></button>
     `;
 
-    card.querySelector('button').addEventListener('click', () => {
+    card.querySelector('button').addEventListener('click', (e) => {
+      e.stopPropagation();
       appState.pdfFiles.splice(index, 1);
       updatePdfListUI();
     });
@@ -486,40 +254,41 @@ function updatePdfListUI() {
   lucide.createIcons();
 }
 
-// --- PIPELINE RUN AND SSE PROCESSOR ---
-async function startPipeline() {
-  // Hide Uploader form, reveal logs
+function resetPdfParsing() {
+  appState.pdfFiles = [];
+  appState.pdfHeaders = [];
+  appState.pdfRows = [];
+  
+  document.getElementById('pdf-upload-group').style.display = 'flex';
+  document.getElementById('pipeline-progress').style.display = 'none';
+  document.getElementById('btn-goto-step2').style.display = 'none';
+  updatePdfListUI();
+}
+
+async function startPdfParsing() {
   document.getElementById('pdf-upload-group').style.display = 'none';
   document.getElementById('pipeline-progress').style.display = 'block';
   
-  // Block going back
+  // Disable stepper navigation clicking during task execution
   document.getElementById('step-nav-1').style.pointerEvents = 'none';
   document.getElementById('step-nav-2').style.pointerEvents = 'none';
   document.getElementById('step-nav-3').style.pointerEvents = 'none';
 
-  // Clear log console
   const consoleLogs = document.getElementById('console-logs');
-  consoleLogs.innerHTML = `<div class="log-line system">[SYSTEM] Starting batch reconciliation task...</div>`;
+  consoleLogs.innerHTML = `<div class="log-line system">[SYSTEM] Starting batch PDF parsing task...</div>`;
 
   // Update Status Indicators
   document.querySelector('.status-indicator').className = 'status-indicator busy';
   document.querySelector('.status-text').innerText = 'Pipeline Status: Processing';
 
-  // Prepare Multipart Request Payload
   const formData = new FormData();
   formData.append('clientId', clientId);
-  formData.append('matchKey', appState.matchKey);
-  formData.append('selectedHeaders', JSON.stringify(appState.selectedHeaders));
-  
-  const customPrompt = document.getElementById('custom-prompt-input').value;
-  formData.append('customPrompt', customPrompt);
-  
   appState.pdfFiles.forEach(file => {
     formData.append('pdfFiles', file);
   });
 
   try {
-    const res = await fetch('/api/process-pdfs', {
+    const res = await fetch('/api/upload-pdf-batch', {
       method: 'POST',
       body: formData
     });
@@ -528,12 +297,8 @@ async function startPipeline() {
       const err = await res.json();
       throw new Error(err.error || 'Failed to start parsing engine');
     }
-
-    // Server responds with { success: true } immediately, processing continues in background.
-    // SSE event stream handles logging and final reconciliation callback.
-
   } catch (error) {
-    writeLog(`[ERROR] Processing initiation failed: ${error.message}`, 'failed');
+    writeLog(`[ERROR] Parsing task initiation failed: ${error.message}`, 'failed');
     
     // Restore layout
     document.getElementById('pdf-upload-group').style.display = 'flex';
@@ -541,7 +306,7 @@ async function startPipeline() {
     document.querySelector('.status-indicator').className = 'status-indicator online';
     document.querySelector('.status-text').innerText = 'Pipeline Status: Ready';
     
-    alert("Reconciliation Pipeline Error: " + error.message);
+    alert("PDF Parsing Error: " + error.message);
   }
 }
 
@@ -553,7 +318,7 @@ function handleSSEMessage(data) {
 
   if (data.status === "start") {
     writeLog(`[SYSTEM] ${data.message}`, 'system');
-    statusTitle.innerText = "Reconciliation Started";
+    statusTitle.innerText = "PDF Parsing Started";
     statusSubtitle.innerText = data.message;
     percentLabel.innerText = "0%";
     fillBar.style.width = "0%";
@@ -561,32 +326,36 @@ function handleSSEMessage(data) {
 
   if (data.status === "parsing") {
     writeLog(`[PARSING] File: ${data.filename}`, 'parsing');
-    statusTitle.innerText = "Parsing PDFs";
-    statusSubtitle.innerText = `LlamaParse processing: ${data.filename}`;
+    statusTitle.innerText = "LlamaParse Digiting";
+    statusSubtitle.innerText = `Processing layout: ${data.filename}`;
     
     const percent = Math.round((data.index / appState.pdfFiles.length) * 100);
     percentLabel.innerText = `${percent}%`;
     fillBar.style.width = `${percent}%`;
   }
 
+  if (data.status === "detecting_schema") {
+    writeLog(`[AI SCHEMA] Analyzing document structure in: ${data.filename}`, 'extracting');
+    statusTitle.innerText = "Analyzing Schema";
+    statusSubtitle.innerText = "Detecting common column fields from document...";
+  }
+
+  if (data.status === "schema_detected") {
+    writeLog(`[AI SCHEMA] Common schema headers: ${data.headers.join(", ")}`, 'system');
+  }
+
   if (data.status === "extracting") {
-    writeLog(`[EXTRACT] Querying Gemini for fields in: ${data.filename}`, 'extracting');
+    writeLog(`[EXTRACT] Claude structured mapping: ${data.filename}`, 'extracting');
     statusTitle.innerText = "Extracting Fields";
-    statusSubtitle.innerText = `Gemini structured analysis: ${data.filename}`;
+    statusSubtitle.innerText = `Claude extracting headers: ${data.filename}`;
   }
 
   if (data.status === "completed_file") {
-    writeLog(`[SUCCESS] Completed file reconciliation: ${data.filename}`, 'completed');
+    writeLog(`[SUCCESS] Completed parsing: ${data.filename}`, 'completed');
   }
 
   if (data.status === "failed_file") {
-    writeLog(`[FAILED] Processing issue: ${data.message}`, 'failed');
-  }
-
-  if (data.status === "comparing") {
-    writeLog(`[COMPARING] ${data.message}`, 'system');
-    statusTitle.innerText = "Running Reconciliation Engine";
-    statusSubtitle.innerText = data.message;
+    writeLog(`[FAILED] File issue: ${data.message}`, 'failed');
   }
 
   if (data.status === "done") {
@@ -595,25 +364,31 @@ function handleSSEMessage(data) {
     percentLabel.innerText = "100%";
     fillBar.style.width = "100%";
 
-    // Save final report data
-    appState.comparisonReport = data.data;
+    // Cache PDF extracted records
+    appState.pdfHeaders = data.data.headers;
+    appState.pdfRows = data.data.rows;
 
-    // Transition to Step 4 after brief delay to let user see 100%
-    setTimeout(() => {
-      renderStep4Dashboard();
-      goToStep(4);
-      
-      // Reset Status
-      document.querySelector('.status-indicator').className = 'status-indicator online';
-      document.querySelector('.status-text').innerText = 'Pipeline Status: Ready';
-    }, 1000);
+    // Render Preview Table in Step 2
+    renderParsedPdfTable();
+
+    // Show Continue Button
+    document.getElementById('btn-goto-step2').style.display = 'flex';
+    statusTitle.innerText = "Parsing Complete";
+    statusSubtitle.innerText = "All PDF data parsed successfully.";
+
+    // Reset status badge
+    document.querySelector('.status-indicator').className = 'status-indicator online';
+    document.querySelector('.status-text').innerText = 'Pipeline Status: Ready';
+    
+    // Enable stepper clicks
+    document.getElementById('step-nav-1').style.pointerEvents = 'auto';
+    document.getElementById('step-nav-2').style.pointerEvents = 'auto';
   }
 
   if (data.status === "error") {
     writeLog(`[ERROR] ${data.message}`, 'failed');
-    alert(`Audit Pipeline Error: ${data.message}`);
+    alert(`Reconciliation Pipeline Error: ${data.message}`);
     
-    // Restore layouts
     document.getElementById('pdf-upload-group').style.display = 'flex';
     document.getElementById('pipeline-progress').style.display = 'none';
     document.querySelector('.status-indicator').className = 'status-indicator online';
@@ -623,14 +398,387 @@ function handleSSEMessage(data) {
 
 function writeLog(message, type) {
   const consoleLogs = document.getElementById('console-logs');
+  if (!consoleLogs) return;
   const line = document.createElement('div');
   const timestamp = new Date().toLocaleTimeString();
   line.className = `log-line ${type}`;
   line.innerText = `[${timestamp}] ${message}`;
   consoleLogs.appendChild(line);
-  
-  // Auto scroll console
   consoleLogs.scrollTop = consoleLogs.scrollHeight;
+}
+
+// --- STEP 2: PARSED PDF DATA PREVIEW ---
+function renderParsedPdfTable() {
+  const table = document.getElementById('pdf-parsed-table');
+  table.innerHTML = '';
+
+  if (appState.pdfHeaders.length === 0 || appState.pdfRows.length === 0) {
+    table.innerHTML = '<tbody><tr><td style="text-align:center; padding:30px;">No PDF records parsed.</td></tr></tbody>';
+    return;
+  }
+
+  // Create Header
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  
+  const thFile = document.createElement('th');
+  thFile.innerText = 'PDF Filename';
+  headerRow.appendChild(thFile);
+
+  appState.pdfHeaders.forEach(h => {
+    const th = document.createElement('th');
+    th.innerText = h;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  // Create Body
+  const tbody = document.createElement('tbody');
+  appState.pdfRows.forEach(row => {
+    const tr = document.createElement('tr');
+    
+    const tdFile = document.createElement('td');
+    tdFile.innerText = row.filename;
+    tdFile.style.fontWeight = '600';
+    tr.appendChild(tdFile);
+
+    appState.pdfHeaders.forEach(h => {
+      const td = document.createElement('td');
+      td.innerText = row[h] !== undefined ? row[h] : '';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+}
+
+// --- STEP 3: EXCEL UPLOAD AND MAPPING HANDLERS ---
+function handleExcelFileSelect(file) {
+  if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
+    alert("Please upload a valid Excel spreadsheet (.xlsx or .xls)");
+    return;
+  }
+
+  appState.excelFile = file;
+
+  document.getElementById('excel-file-name').innerText = file.name;
+  document.getElementById('excel-file-size').innerText = formatBytes(file.size);
+  document.getElementById('excel-drop-zone').style.display = 'none';
+  document.getElementById('excel-file-banner').style.display = 'flex';
+
+  uploadExcelToServer(file);
+}
+
+async function uploadExcelToServer(file) {
+  const formData = new FormData();
+  formData.append('excelFile', file);
+
+  try {
+    document.getElementById('excel-preview-area').style.display = 'block';
+    const previewTable = document.getElementById('excel-preview-table');
+    previewTable.innerHTML = `<tr><td style="text-align:center; padding: 30px;">
+      <div class="loading-spinner"></div>
+      <div style="margin-top:10px;">Reading spreadsheet structure...</div>
+    </td></tr>`;
+
+    const res = await fetch('/api/upload-excel', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to read spreadsheet');
+    }
+
+    const data = await res.json();
+    appState.excelHeaders = data.headers;
+    appState.excelPreview = data.preview;
+
+    renderExcelPreviewTable();
+    populateMappingLayout();
+
+    document.getElementById('mapping-container').style.display = 'block';
+    validateReconciliationTrigger();
+
+  } catch (error) {
+    alert("Error loading Excel file: " + error.message);
+    resetExcelUpload();
+  }
+}
+
+function renderExcelPreviewTable() {
+  const table = document.getElementById('excel-preview-table');
+  table.innerHTML = '';
+
+  if (appState.excelHeaders.length === 0 || appState.excelPreview.length === 0) {
+    return;
+  }
+
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  appState.excelHeaders.forEach(h => {
+    const th = document.createElement('th');
+    th.innerText = h;
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  appState.excelPreview.forEach(row => {
+    const tr = document.createElement('tr');
+    appState.excelHeaders.forEach(h => {
+      const td = document.createElement('td');
+      td.innerText = row[h] !== undefined ? row[h] : '';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+}
+
+function resetExcelUpload() {
+  appState.excelFile = null;
+  appState.excelHeaders = [];
+  appState.excelPreview = [];
+  appState.mappings = {};
+  appState.matchKey = '';
+
+  document.getElementById('excel-drop-zone').style.display = 'flex';
+  document.getElementById('excel-file-banner').style.display = 'none';
+  document.getElementById('excel-preview-area').style.display = 'none';
+  document.getElementById('mapping-container').style.display = 'none';
+  document.getElementById('btn-run-reconciliation').disabled = true;
+  document.getElementById('excel-input').value = '';
+}
+
+function populateMappingLayout() {
+  const mappingGrid = document.getElementById('mapping-grid');
+  const matchKeySelect = document.getElementById('match-key-select');
+
+  mappingGrid.innerHTML = '';
+  matchKeySelect.innerHTML = '<option value="" disabled selected>Select unique matching key...</option>';
+
+  appState.mappings = {};
+
+  appState.pdfHeaders.forEach(pdfHeader => {
+    appState.mappings[pdfHeader] = '';
+
+    // Create Mapping Row Container
+    const row = document.createElement('div');
+    row.className = 'mapping-row';
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.gap = '15px';
+    row.style.marginBottom = '12px';
+
+    const pdfCol = document.createElement('div');
+    pdfCol.style.flex = '1';
+    pdfCol.style.fontWeight = '500';
+    pdfCol.innerHTML = `<span class="pdf-field-tag">${pdfHeader}</span>`;
+
+    const arrowCol = document.createElement('div');
+    arrowCol.innerHTML = '<i data-lucide="arrow-right" style="color:var(--cyan)"></i>';
+
+    const excelCol = document.createElement('div');
+    excelCol.style.flex = '1.2';
+    excelCol.className = 'select-wrapper';
+
+    const select = document.createElement('select');
+    select.id = `map-select-${pdfHeader.replace(/\s+/g, '-')}`;
+    select.innerHTML = '<option value="" selected>Do not compare (ignore)</option>';
+    
+    appState.excelHeaders.forEach(eh => {
+      const option = document.createElement('option');
+      option.value = eh;
+      option.innerText = eh;
+      select.appendChild(option);
+    });
+
+    select.addEventListener('change', (e) => {
+      appState.mappings[pdfHeader] = e.target.value;
+      updateMatchKeyDropdownOptions();
+      validateReconciliationTrigger();
+    });
+
+    excelCol.appendChild(select);
+    excelCol.innerHTML += '<i data-lucide="chevron-down" class="select-chevron"></i>';
+    // Reattach select event listener after innerHTML replacement
+    excelCol.querySelector('select').addEventListener('change', (e) => {
+      appState.mappings[pdfHeader] = e.target.value;
+      updateMatchKeyDropdownOptions();
+      validateReconciliationTrigger();
+    });
+
+    row.appendChild(pdfCol);
+    row.appendChild(arrowCol);
+    row.appendChild(excelCol);
+    mappingGrid.appendChild(row);
+  });
+
+  lucide.createIcons();
+}
+
+function updateMatchKeyDropdownOptions() {
+  const matchKeySelect = document.getElementById('match-key-select');
+  const previousVal = appState.matchKey;
+
+  matchKeySelect.innerHTML = '<option value="" disabled>Select unique matching key...</option>';
+
+  let hasSelectedPrevious = false;
+  
+  Object.keys(appState.mappings).forEach(pdfHeader => {
+    const excelHeader = appState.mappings[pdfHeader];
+    // Only allow mapped fields to serve as unique match keys
+    if (excelHeader) {
+      const option = document.createElement('option');
+      option.value = pdfHeader;
+      option.innerText = `${pdfHeader} (↔ ${excelHeader})`;
+      if (pdfHeader === previousVal) {
+        option.selected = true;
+        hasSelectedPrevious = true;
+      }
+      matchKeySelect.appendChild(option);
+    }
+  });
+
+  if (!hasSelectedPrevious) {
+    appState.matchKey = '';
+    matchKeySelect.value = '';
+  }
+}
+
+function validateReconciliationTrigger() {
+  const btn = document.getElementById('btn-run-reconciliation');
+  const matchKeySelected = appState.matchKey;
+  
+  // Must have selected a unique match key, and that key must have a mapped Excel header
+  const isValid = matchKeySelected && appState.mappings[matchKeySelected];
+  btn.disabled = !isValid;
+}
+
+// AI Auto column mapping
+async function runAiAutoMapping() {
+  const btn = document.getElementById('btn-ai-auto-map');
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<div class="loading-spinner" style="width:14px; height:14px; margin-right:6px; border-width:2px;"></div> Mapping columns...`;
+
+  try {
+    const res = await fetch('/api/auto-map-columns', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        pdfHeaders: appState.pdfHeaders,
+        excelHeaders: appState.excelHeaders
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'AI mapping request failed.');
+    }
+
+    const data = await res.json();
+    const mapping = data.mapping;
+
+    // Apply mappings to dropdowns and state
+    Object.keys(mapping).forEach(pdfHeader => {
+      const excelHeader = mapping[pdfHeader];
+      if (excelHeader && appState.excelHeaders.includes(excelHeader)) {
+        appState.mappings[pdfHeader] = excelHeader;
+        const select = document.getElementById(`map-select-${pdfHeader.replace(/\s+/g, '-')}`);
+        if (select) {
+          select.value = excelHeader;
+        }
+      }
+    });
+
+    // Auto select first mapped column as match key
+    updateMatchKeyDropdownOptions();
+    const matchKeyKeys = Object.keys(appState.mappings).filter(k => appState.mappings[k]);
+    if (matchKeyKeys.length > 0) {
+      // Try to find a field containing 'id', 'num', or 'key'
+      let keyToSelect = matchKeyKeys.find(k => k.toLowerCase().includes('id') || k.toLowerCase().includes('num') || k.toLowerCase().includes('key'));
+      if (!keyToSelect) keyToSelect = matchKeyKeys[0];
+      
+      appState.matchKey = keyToSelect;
+      document.getElementById('match-key-select').value = keyToSelect;
+    }
+
+    validateReconciliationTrigger();
+
+  } catch (error) {
+    alert("AI Auto-mapping failed: " + error.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
+}
+
+// Run Reconciliation Task
+async function runReconciliation() {
+  const btn = document.getElementById('btn-run-reconciliation');
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<div class="loading-spinner" style="width:16px; height:16px; margin-right:8px; border-width:2px;"></div> Reconciling datasets...`;
+
+  try {
+    // Block going back
+    document.getElementById('step-nav-1').style.pointerEvents = 'none';
+    document.getElementById('step-nav-2').style.pointerEvents = 'none';
+    document.getElementById('step-nav-3').style.pointerEvents = 'none';
+
+    // Show loading spinner in Step 4 Executive Box
+    document.getElementById('executive-report-content').innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px; color: #a0aec0; padding: 10px 0;">
+        <div class="loading-spinner" style="width: 20px; height: 20px; border-width: 2px;"></div>
+        <span>Generating auditor executive report via Claude...</span>
+      </div>
+    `;
+
+    const res = await fetch('/api/reconcile-tables', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        mappings: appState.mappings,
+        matchKey: appState.matchKey
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Reconciliation request failed.');
+    }
+
+    const data = await res.json();
+    appState.comparisonReport = data.report;
+    appState.executiveSummary = data.executiveSummary;
+
+    // Render step 4 details
+    renderStep4Dashboard();
+    goToStep(4);
+
+    // Re-enable navigation clicks
+    document.getElementById('step-nav-1').style.pointerEvents = 'auto';
+    document.getElementById('step-nav-2').style.pointerEvents = 'auto';
+    document.getElementById('step-nav-3').style.pointerEvents = 'auto';
+
+  } catch (error) {
+    alert("Reconciliation Error: " + error.message);
+    document.getElementById('step-nav-1').style.pointerEvents = 'auto';
+    document.getElementById('step-nav-2').style.pointerEvents = 'auto';
+    document.getElementById('step-nav-3').style.pointerEvents = 'auto';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
 }
 
 // --- STEP 4: REPORTING AND COMPARISON RESULTS ---
@@ -649,10 +797,17 @@ function renderStep4Dashboard() {
   document.getElementById('export-pdf-btn').href = `/api/export/pdf`;
   document.getElementById('export-word-btn').href = `/api/export/word`;
 
-  // 3. Render Detail Log Table
+  // 3. Render Claude Executive Summary
+  const mdBox = document.getElementById('executive-report-content');
+  mdBox.style.background = 'rgba(255, 255, 255, 0.03)';
+  mdBox.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+  mdBox.style.padding = '25px';
+  mdBox.innerHTML = parseMarkdown(appState.executiveSummary);
+
+  // 4. Render Detail Log Table
   renderReportTable();
 
-  // 4. Render Unmatched Excel Table
+  // 5. Render Unmatched Excel Table
   renderUnmatchedExcelTable();
 }
 
@@ -675,7 +830,7 @@ function renderReportTable() {
     <th>PDF Document Name</th>
     <th>Status</th>
     <th>Matched Excel Row</th>
-    <th>${appState.matchKey} Value</th>
+    <th>Key Value (${appState.matchKey})</th>
   `;
   thead.appendChild(headerTr);
   table.appendChild(thead);
@@ -684,7 +839,6 @@ function renderReportTable() {
   const tbody = document.createElement('tbody');
   
   report.records.forEach((record, index) => {
-    // Main row
     const tr = document.createElement('tr');
     tr.className = 'main-row';
     tr.dataset.index = index;
@@ -705,7 +859,7 @@ function renderReportTable() {
       statusLabel = 'Unmatched';
     }
 
-    const keyVal = record.matchedExcelRow ? record.matchedExcelRow[appState.matchKey] || 'N/A' : 'N/A';
+    const keyVal = record.pdfMatchValue || 'N/A';
 
     tr.innerHTML = `
       <td><i data-lucide="chevron-right" class="arrow-toggle" id="arrow-${index}"></i></td>
@@ -725,7 +879,8 @@ function renderReportTable() {
 
     // Build the grid contents comparing each field
     let fieldsHtml = '';
-    appState.selectedHeaders.forEach(header => {
+    const selectedHeaders = Object.keys(appState.mappings);
+    selectedHeaders.forEach(header => {
       const field = record.fields[header] || { excelValue: 'N/A', pdfValue: '', status: 'MISSING_IN_PDF' };
       
       let cardClass = 'matched';
@@ -745,7 +900,7 @@ function renderReportTable() {
       fieldsHtml += `
         <div class="detail-field-card ${cardClass}">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span class="field-name-label">${header}</span>
+            <span class="field-name-label">${header} ${field.excelHeader ? `(↔ ${field.excelHeader})` : ''}</span>
             <span class="field-status-badge ${cardClass}">${statusText}</span>
           </div>
           <div class="comparison-values">
@@ -765,7 +920,7 @@ function renderReportTable() {
     expTr.innerHTML = `
       <td colspan="5">
         <div class="expansion-details-container">
-          <div class="expanded-title">Field Comparison breakdown</div>
+          <div class="expanded-title">Field Comparison Breakdown</div>
           <div class="details-grid">
             ${fieldsHtml}
           </div>
@@ -775,7 +930,6 @@ function renderReportTable() {
 
     tbody.appendChild(expTr);
 
-    // Click handler for expansion
     tr.querySelector('.arrow-toggle').addEventListener('click', (e) => {
       e.stopPropagation();
       toggleRowExpansion(index);
@@ -810,7 +964,7 @@ function renderUnmatchedExcelTable() {
   table.innerHTML = '';
 
   if (!report || report.unmatchedExcelRows.length === 0) {
-    table.innerHTML = '<tbody><tr><td style="text-align:center; padding: 15px;">All Excel rows were matched with PDF files!</td></tr></tbody>';
+    table.innerHTML = '<tbody><tr><td style="text-align:center; padding: 15px;">All Excel rows were matched with PDF records!</td></tr></tbody>';
     return;
   }
 
@@ -819,7 +973,6 @@ function renderUnmatchedExcelTable() {
   const headerTr = document.createElement('tr');
   headerTr.innerHTML = `<th>Row Number</th>`;
   
-  // Get keys from first item
   const sampleRow = report.unmatchedExcelRows[0].data;
   const keys = Object.keys(sampleRow);
 
@@ -863,7 +1016,7 @@ function filterReportTable() {
     if (!record) return;
 
     const matchesSearch = record.filename.toLowerCase().includes(query) || 
-                         (record.matchedExcelRow && String(record.matchedExcelRow[appState.matchKey]).toLowerCase().includes(query));
+                         (record.pdfMatchValue && String(record.pdfMatchValue).toLowerCase().includes(query));
     
     let matchesStatus = true;
     if (filter !== 'ALL') {
@@ -872,7 +1025,6 @@ function filterReportTable() {
 
     if (matchesSearch && matchesStatus) {
       row.style.display = 'table-row';
-      // keep expansion closed on filter updates
       expRow.style.display = 'none';
       arrow.classList.remove('open');
     } else {
@@ -883,35 +1035,64 @@ function filterReportTable() {
   });
 }
 
+// Simple Markdown-to-HTML parser for Claude's Auditor Report
+function parseMarkdown(md) {
+  if (!md) return '';
+  let html = md;
+  // Clean wrappers
+  html = html.replace(/```markdown\s*/g, '').replace(/```\s*/g, '');
+  // Blockquotes
+  html = html.replace(/^> (.*)$/gim, '<blockquote style="border-left: 4px solid var(--cyan); background: rgba(56,189,248,0.05); padding: 15px 20px; margin: 15px 0; border-radius: 4px; font-style: italic; color:#e2e8f0;">$1</blockquote>');
+  // Headers
+  html = html.replace(/^### (.*)$/gim, '<h3 style="margin-top:25px; margin-bottom:12px; font-weight:600; color:var(--cyan); font-family:\'Montserrat\', sans-serif;">$1</h3>');
+  html = html.replace(/^## (.*)$/gim, '<h2 style="margin-top:30px; margin-bottom:15px; font-weight:600; color:var(--cyan); font-family:\'Montserrat\', sans-serif; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:8px;">$1</h2>');
+  html = html.replace(/^# (.*)$/gim, '<h1 style="margin-top:35px; margin-bottom:20px; font-weight:700; color:#fff; font-family:\'Montserrat\', sans-serif;">$1</h1>');
+  // Bold / Italics
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong style="color:#fff; font-weight:600;">$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em style="color:#cbd5e1;">$1</em>');
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-family: monospace; color:var(--cyan); font-size:14px;">$1</code>');
+  // Bullet items
+  html = html.replace(/^\s*-\s+(.*)$/gim, '<li style="margin-bottom:8px; margin-left: 20px; list-style-type: disc; color:#e2e8f0;">$1</li>');
+  // Wrap list tags
+  html = html.replace(/(<li style=".*?">.*?<\/li>)(?!\s*<li)/gs, '<ul style="margin: 15px 0;">$1</ul>');
+
+  // Paragraph tags
+  html = html.split('\n\n').map(p => {
+    const trimmed = p.trim();
+    if (trimmed.startsWith('<h') || trimmed.startsWith('<ul') || trimmed.startsWith('<block') || trimmed.startsWith('<li')) {
+      return trimmed;
+    }
+    return `<p style="margin-bottom:15px; color:#cbd5e1;">${trimmed.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+
+  return html;
+}
+
 // Restart Application
 function restartApplication() {
   if (confirm("Are you sure you want to start a new reconciliation project? Current results will be reset.")) {
-    // Reset state
     appState = {
       currentStep: 1,
+      pdfFiles: [],
+      pdfHeaders: [],
+      pdfRows: [],
       excelFile: null,
       excelHeaders: [],
       excelPreview: [],
-      selectedHeaders: [],
+      mappings: {},
       matchKey: '',
-      pdfFiles: [],
-      comparisonReport: null
+      comparisonReport: null,
+      executiveSummary: ''
     };
 
-    // Reset UI forms
+    resetPdfParsing();
     resetExcelUpload();
-    updatePdfListUI();
-    document.getElementById('custom-prompt-input').value = '';
     
-    // Enable back going
     document.getElementById('step-nav-1').style.pointerEvents = 'auto';
     document.getElementById('step-nav-2').style.pointerEvents = 'auto';
     document.getElementById('step-nav-3').style.pointerEvents = 'auto';
 
-    // Show step 1
-    document.getElementById('pdf-upload-group').style.display = 'flex';
-    document.getElementById('pipeline-progress').style.display = 'none';
-    
     goToStep(1);
   }
 }

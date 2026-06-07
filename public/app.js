@@ -18,6 +18,13 @@ let appState = {
 
 let currentPdfBlobUrl = null;
 
+function updateSystemStatus(className, text) {
+  const indicator = document.querySelector('.status-indicator');
+  const textEl = document.querySelector('.status-text');
+  if (indicator) indicator.className = `status-indicator ${className}`;
+  if (textEl) textEl.innerText = text;
+}
+
 // DOM Elements
 const stepNavs = [
   document.getElementById('step-nav-1'),
@@ -325,11 +332,33 @@ async function startPdfParsing() {
   document.getElementById('step-nav-3').style.pointerEvents = 'none';
 
   const consoleLogs = document.getElementById('console-logs');
-  consoleLogs.innerHTML = `<div class="log-line system">[SYSTEM] Starting batch PDF parsing task...</div>`;
+  consoleLogs.innerHTML = '';
+  
+  // Initialize file progress list visually
+  appState.pdfFiles.forEach((file, idx) => {
+    const row = document.createElement('div');
+    row.id = `file-progress-row-${idx}`;
+    row.className = 'progress-file-row';
+    row.style.display = 'flex';
+    row.style.justifyContent = 'space-between';
+    row.style.alignItems = 'center';
+    row.style.padding = '10px 14px';
+    row.style.borderBottom = '1px solid rgba(255, 255, 255, 0.05)';
+    row.style.fontSize = '13px';
+    row.style.color = 'var(--text-muted)';
+    row.innerHTML = `
+      <span style="font-weight: 500; color: #fff; display: flex; align-items: center; gap: 8px;">
+        <i data-lucide="file" style="width: 14px; height: 14px; color: var(--text-muted);"></i>
+        ${file.name}
+      </span>
+      <span class="file-status-label" style="color: var(--text-muted);">Queued</span>
+    `;
+    consoleLogs.appendChild(row);
+  });
+  lucide.createIcons();
 
-  // Update Status Indicators
-  document.querySelector('.status-indicator').className = 'status-indicator busy';
-  document.querySelector('.status-text').innerText = 'Pipeline Status: Processing';
+  // Update Status Indicators safely
+  updateSystemStatus('busy', 'Pipeline Status: Processing');
 
   const formData = new FormData();
   formData.append('clientId', clientId);
@@ -353,8 +382,7 @@ async function startPdfParsing() {
     // Restore layout
     document.getElementById('pdf-upload-group').style.display = 'flex';
     document.getElementById('pipeline-progress').style.display = 'none';
-    document.querySelector('.status-indicator').className = 'status-indicator online';
-    document.querySelector('.status-text').innerText = 'Pipeline Status: Ready';
+    updateSystemStatus('online', 'Pipeline Status: Ready');
     
     alert("PDF Parsing Error: " + error.message);
   }
@@ -382,6 +410,15 @@ function handleSSEMessage(data) {
     const percent = Math.round((data.index / appState.pdfFiles.length) * 100);
     percentLabel.innerText = `${percent}%`;
     fillBar.style.width = `${percent}%`;
+
+    // Update individual file row status
+    const row = document.getElementById(`file-progress-row-${data.index}`);
+    if (row) {
+      const label = row.querySelector('.file-status-label');
+      if (label) {
+        label.innerHTML = `<span style="color: var(--primary); display: inline-flex; align-items: center; gap: 6px;"><div class="loading-spinner" style="width: 10px; height: 10px; border-width: 1.5px; border-color: var(--primary) transparent var(--primary) transparent;"></div> Parsing...</span>`;
+      }
+    }
   }
 
   if (data.status === "detecting_schema") {
@@ -398,14 +435,43 @@ function handleSSEMessage(data) {
     writeLog(`[EXTRACT] Claude structured mapping: ${data.filename}`, 'extracting');
     statusTitle.innerText = "Extracting Fields";
     statusSubtitle.innerText = `Claude extracting headers: ${data.filename}`;
+
+    // Update individual file row status
+    const row = document.getElementById(`file-progress-row-${data.index}`);
+    if (row) {
+      const label = row.querySelector('.file-status-label');
+      if (label) {
+        label.innerHTML = `<span style="color: var(--warning); display: inline-flex; align-items: center; gap: 6px;"><div class="loading-spinner" style="width: 10px; height: 10px; border-width: 1.5px; border-color: var(--warning) transparent var(--warning) transparent;"></div> Extracting...</span>`;
+      }
+    }
   }
 
   if (data.status === "completed_file") {
     writeLog(`[SUCCESS] Completed parsing: ${data.filename}`, 'completed');
+
+    // Update individual file row status
+    const row = document.getElementById(`file-progress-row-${data.index}`);
+    if (row) {
+      const label = row.querySelector('.file-status-label');
+      if (label) {
+        label.innerHTML = `<span style="color: var(--success); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="check-circle" style="width: 12px; height: 12px;"></i> Completed</span>`;
+        lucide.createIcons();
+      }
+    }
   }
 
   if (data.status === "failed_file") {
     writeLog(`[FAILED] File issue: ${data.message}`, 'failed');
+
+    // Update individual file row status
+    const row = document.getElementById(`file-progress-row-${data.index}`);
+    if (row) {
+      const label = row.querySelector('.file-status-label');
+      if (label) {
+        label.innerHTML = `<span style="color: var(--danger); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="x-circle" style="width: 12px; height: 12px;"></i> Failed</span>`;
+        lucide.createIcons();
+      }
+    }
   }
 
   if (data.status === "done") {
@@ -427,8 +493,7 @@ function handleSSEMessage(data) {
     statusSubtitle.innerText = "All PDF data parsed successfully.";
 
     // Reset status badge
-    document.querySelector('.status-indicator').className = 'status-indicator online';
-    document.querySelector('.status-text').innerText = 'Pipeline Status: Ready';
+    updateSystemStatus('online', 'Pipeline Status: Ready');
     
     // Enable stepper clicks
     document.getElementById('step-nav-1').style.pointerEvents = 'auto';
@@ -441,8 +506,7 @@ function handleSSEMessage(data) {
     
     document.getElementById('pdf-upload-group').style.display = 'flex';
     document.getElementById('pipeline-progress').style.display = 'none';
-    document.querySelector('.status-indicator').className = 'status-indicator online';
-    document.querySelector('.status-text').innerText = 'Pipeline Status: Ready';
+    updateSystemStatus('online', 'Pipeline Status: Ready');
   }
 }
 
@@ -511,7 +575,7 @@ function renderParsedPdfTable() {
     tdAction.style.textAlign = 'center';
     
     const viewBtn = document.createElement('button');
-    viewBtn.className = 'secondary-btn';
+    viewBtn.className = 'success-btn';
     viewBtn.style.padding = '4px 10px';
     viewBtn.style.fontSize = '12px';
     viewBtn.style.minHeight = 'auto';

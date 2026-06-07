@@ -544,6 +544,27 @@ tr:last-child td {
   border-color: rgba(255, 255, 255, 0.15);
 }
 
+.success-btn {
+  background: var(--success-muted);
+  color: var(--success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.success-btn:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
+}
+
 /* Step 2 Layout - Config Grid */
 .config-grid {
   display: grid;

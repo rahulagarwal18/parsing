@@ -116,17 +116,19 @@
             <div class="progress-bar-fill" id="progress-bar-fill"></div>
           </div>
 
-          <div class="console-panel">
-            <div class="console-header">
-              <div class="console-dots">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-              <span class="console-title">Document Parsing Status</span>
+          <!-- Visual Loading & Progress Screen -->
+          <div class="parsing-progress-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: var(--card-radius); padding: 30px; margin-top: 25px; display: flex; flex-direction: column; gap: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 15px;">
+              <span style="font-weight: 600; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="loader-2" class="loading-spinner-icon" style="width: 18px; height: 18px; color: var(--cyan); animation: spin 1.5s linear infinite;"></i>
+                Document Processing Queue
+              </span>
+              <span id="queue-status-text" style="font-size: 13px; color: var(--cyan); font-weight: 500;">Initializing...</span>
             </div>
-            <div class="console-logs" id="console-logs">
-              <div class="log-line system">[SYSTEM] Ready to start parsing.</div>
+            
+            <!-- Grid of Uploaded Files with Status -->
+            <div id="file-progress-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; max-height: 300px; overflow-y: auto; padding-right: 5px;">
+              <!-- Populated dynamically -->
             </div>
           </div>
           

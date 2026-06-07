@@ -331,31 +331,42 @@ async function startPdfParsing() {
   document.getElementById('step-nav-2').style.pointerEvents = 'none';
   document.getElementById('step-nav-3').style.pointerEvents = 'none';
 
-  const consoleLogs = document.getElementById('console-logs');
-  consoleLogs.innerHTML = '';
-  
-  // Initialize file progress list visually
-  appState.pdfFiles.forEach((file, idx) => {
-    const row = document.createElement('div');
-    row.id = `file-progress-row-${idx}`;
-    row.className = 'progress-file-row';
-    row.style.display = 'flex';
-    row.style.justifyContent = 'space-between';
-    row.style.alignItems = 'center';
-    row.style.padding = '10px 14px';
-    row.style.borderBottom = '1px solid rgba(255, 255, 255, 0.05)';
-    row.style.fontSize = '13px';
-    row.style.color = 'var(--text-muted)';
-    row.innerHTML = `
-      <span style="font-weight: 500; color: #fff; display: flex; align-items: center; gap: 8px;">
-        <i data-lucide="file" style="width: 14px; height: 14px; color: var(--text-muted);"></i>
-        ${file.name}
-      </span>
-      <span class="file-status-label" style="color: var(--text-muted);">Queued</span>
-    `;
-    consoleLogs.appendChild(row);
-  });
-  lucide.createIcons();
+  const progressList = document.getElementById('file-progress-list');
+  if (progressList) {
+    progressList.innerHTML = '';
+    
+    // Initialize file progress list visually
+    appState.pdfFiles.forEach((file, idx) => {
+      const card = document.createElement('div');
+      card.id = `file-progress-card-${idx}`;
+      card.className = 'file-progress-card';
+      card.style.background = 'rgba(255, 255, 255, 0.01)';
+      card.style.border = '1px solid rgba(255, 255, 255, 0.04)';
+      card.style.borderRadius = '8px';
+      card.style.padding = '12px 15px';
+      card.style.display = 'flex';
+      card.style.alignItems = 'center';
+      card.style.justifyContent = 'space-between';
+      card.style.gap = '10px';
+      card.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; flex: 1;">
+          <i data-lucide="file-text" style="width: 16px; height: 16px; color: var(--text-muted); flex-shrink: 0;"></i>
+          <span style="font-size: 13px; font-weight: 500; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${file.name}">${file.name}</span>
+        </div>
+        <div class="file-status-badge" style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+          <i data-lucide="clock" style="width: 14px; height: 14px;"></i> Queued
+        </div>
+      `;
+      progressList.appendChild(card);
+    });
+    lucide.createIcons();
+  }
+
+  const queueStatus = document.getElementById('queue-status-text');
+  if (queueStatus) {
+    queueStatus.innerText = `0 of ${appState.pdfFiles.length} files parsed`;
+    queueStatus.style.color = 'var(--cyan)';
+  }
 
   // Update Status Indicators safely
   updateSystemStatus('busy', 'Pipeline Status: Processing');
@@ -411,13 +422,20 @@ function handleSSEMessage(data) {
     percentLabel.innerText = `${percent}%`;
     fillBar.style.width = `${percent}%`;
 
-    // Update individual file row status
-    const row = document.getElementById(`file-progress-row-${data.index}`);
-    if (row) {
-      const label = row.querySelector('.file-status-label');
-      if (label) {
-        label.innerHTML = `<span style="color: var(--primary); display: inline-flex; align-items: center; gap: 6px;"><div class="loading-spinner" style="width: 10px; height: 10px; border-width: 1.5px; border-color: var(--primary) transparent var(--primary) transparent;"></div> Parsing...</span>`;
+    // Update individual file card status
+    const card = document.getElementById(`file-progress-card-${data.index}`);
+    if (card) {
+      card.style.borderColor = 'rgba(56, 189, 248, 0.3)';
+      card.style.background = 'rgba(56, 189, 248, 0.02)';
+      const badge = card.querySelector('.file-status-badge');
+      if (badge) {
+        badge.style.color = 'var(--cyan)';
+        badge.innerHTML = `<div class="loading-spinner" style="width: 12px; height: 12px; border-width: 1.5px; border-top-color: var(--cyan); margin-right: 2px;"></div> Parsing`;
       }
+    }
+    const queueStatus = document.getElementById('queue-status-text');
+    if (queueStatus) {
+      queueStatus.innerText = `Processing file ${data.index + 1} of ${appState.pdfFiles.length}`;
     }
   }
 
@@ -436,12 +454,15 @@ function handleSSEMessage(data) {
     statusTitle.innerText = "Extracting Fields";
     statusSubtitle.innerText = `Claude extracting headers: ${data.filename}`;
 
-    // Update individual file row status
-    const row = document.getElementById(`file-progress-row-${data.index}`);
-    if (row) {
-      const label = row.querySelector('.file-status-label');
-      if (label) {
-        label.innerHTML = `<span style="color: var(--warning); display: inline-flex; align-items: center; gap: 6px;"><div class="loading-spinner" style="width: 10px; height: 10px; border-width: 1.5px; border-color: var(--warning) transparent var(--warning) transparent;"></div> Extracting...</span>`;
+    // Update individual file card status
+    const card = document.getElementById(`file-progress-card-${data.index}`);
+    if (card) {
+      card.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+      card.style.background = 'rgba(245, 158, 11, 0.02)';
+      const badge = card.querySelector('.file-status-badge');
+      if (badge) {
+        badge.style.color = 'var(--warning)';
+        badge.innerHTML = `<div class="loading-spinner" style="width: 12px; height: 12px; border-width: 1.5px; border-top-color: var(--warning); margin-right: 2px;"></div> Extracting`;
       }
     }
   }
@@ -449,26 +470,36 @@ function handleSSEMessage(data) {
   if (data.status === "completed_file") {
     writeLog(`[SUCCESS] Completed parsing: ${data.filename}`, 'completed');
 
-    // Update individual file row status
-    const row = document.getElementById(`file-progress-row-${data.index}`);
-    if (row) {
-      const label = row.querySelector('.file-status-label');
-      if (label) {
-        label.innerHTML = `<span style="color: var(--success); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="check-circle" style="width: 12px; height: 12px;"></i> Completed</span>`;
+    // Update individual file card status
+    const card = document.getElementById(`file-progress-card-${data.index}`);
+    if (card) {
+      card.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+      card.style.background = 'rgba(16, 185, 129, 0.02)';
+      const badge = card.querySelector('.file-status-badge');
+      if (badge) {
+        badge.style.color = 'var(--success)';
+        badge.innerHTML = `<i data-lucide="check-circle" style="width: 14px; height: 14px; color: var(--success);"></i> Done`;
         lucide.createIcons();
       }
+    }
+    const queueStatus = document.getElementById('queue-status-text');
+    if (queueStatus) {
+      queueStatus.innerText = `${data.index + 1} of ${appState.pdfFiles.length} files parsed`;
     }
   }
 
   if (data.status === "failed_file") {
     writeLog(`[FAILED] File issue: ${data.message}`, 'failed');
 
-    // Update individual file row status
-    const row = document.getElementById(`file-progress-row-${data.index}`);
-    if (row) {
-      const label = row.querySelector('.file-status-label');
-      if (label) {
-        label.innerHTML = `<span style="color: var(--danger); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="x-circle" style="width: 12px; height: 12px;"></i> Failed</span>`;
+    // Update individual file card status
+    const card = document.getElementById(`file-progress-card-${data.index}`);
+    if (card) {
+      card.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+      card.style.background = 'rgba(239, 68, 68, 0.02)';
+      const badge = card.querySelector('.file-status-badge');
+      if (badge) {
+        badge.style.color = 'var(--danger)';
+        badge.innerHTML = `<i data-lucide="x-circle" style="width: 14px; height: 14px; color: var(--danger);"></i> Failed`;
         lucide.createIcons();
       }
     }
@@ -498,6 +529,12 @@ function handleSSEMessage(data) {
     // Enable stepper clicks
     document.getElementById('step-nav-1').style.pointerEvents = 'auto';
     document.getElementById('step-nav-2').style.pointerEvents = 'auto';
+
+    const queueStatus = document.getElementById('queue-status-text');
+    if (queueStatus) {
+      queueStatus.innerText = `Completed`;
+      queueStatus.style.color = 'var(--success)';
+    }
   }
 
   if (data.status === "error") {
@@ -511,14 +548,7 @@ function handleSSEMessage(data) {
 }
 
 function writeLog(message, type) {
-  const consoleLogs = document.getElementById('console-logs');
-  if (!consoleLogs) return;
-  const line = document.createElement('div');
-  const timestamp = new Date().toLocaleTimeString();
-  line.className = `log-line ${type}`;
-  line.innerText = `[${timestamp}] ${message}`;
-  consoleLogs.appendChild(line);
-  consoleLogs.scrollTop = consoleLogs.scrollHeight;
+  console.log(`[${type}] ${message}`);
 }
 
 // --- STEP 2: PARSED PDF DATA PREVIEW ---

@@ -90,7 +90,8 @@ async function callClaude(prompt, responseSchema, toolName = "extract_data") {
         // If the model is not found/not supported for this key/account, proceed to fallback
         if (response.status === 404 || errText.includes("not_found_error") || errText.includes("model_not_found")) {
           isModelNotFoundError = true;
-          console.warn(`Model ${model} is not supported/found. Trying fallback model...`);
+          lastError = new Error(`Model ${model} not supported: ${errText}`);
+          console.warn(`Model ${model} is not supported/found. Response: ${errText}`);
           break;
         }
 

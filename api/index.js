@@ -10,8 +10,11 @@ import { parsePdf } from "../services/llama.js";
 import { extractFieldsFromText } from "../services/gemini.js";
 import { compareData } from "../services/comparator.js";
 import { generateExcelReport, generatePdfReport, generateDocxReport } from "../services/exporter.js";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const app = express();
 

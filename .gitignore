@@ -1,0 +1,18 @@
+# Node dependencies
+node_modules/
+
+# Local environment variables
+.env
+
+# Uploads and temporary directories
+uploads/
+temp/
+
+# Compiled files or test reports
+*.xlsx
+*.pdf
+*.docx
+
+# OS files
+.DS_Store
+Thumbs.db

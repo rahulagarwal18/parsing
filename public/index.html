@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reconciliation Dashboard - PDF & Excel Data Comparator</title>
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons for premium visual feel -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Main CSS File -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Header / Navigation Banner -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <i data-lucide="layers" class="logo-icon"></i>
+        <h1>Reconcile<span>AI</span></h1>
+      </div>
+      <div class="system-status">
+        <span class="status-indicator online"></span>
+        <span class="status-text">Pipeline Status: Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-container">
+    <!-- Stepper Navigation -->
+    <div class="stepper-container">
+      <div class="step active" id="step-nav-1">
+        <div class="step-num">1</div>
+        <div class="step-label">Upload Excel</div>
+      </div>
+      <div class="step-line"></div>
+      <div class="step" id="step-nav-2">
+        <div class="step-num">2</div>
+        <div class="step-label">Configure Columns</div>
+      </div>
+      <div class="step-line"></div>
+      <div class="step" id="step-nav-3">
+        <div class="step-num">3</div>
+        <div class="step-label">Parse PDFs</div>
+      </div>
+      <div class="step-line"></div>
+      <div class="step" id="step-nav-4">
+        <div class="step-num">4</div>
+        <div class="step-label">Reconciliation Report</div>
+      </div>
+    </div>
+
+    <!-- Active Card Display Panel -->
+    <section class="card-display-area">
+      
+      <!-- STEP 1: Upload Excel File -->
+      <div class="setup-card active" id="panel-step-1">
+        <div class="card-header">
+          <i data-lucide="file-spreadsheet" class="card-icon excel-theme"></i>
+          <div>
+            <h2>Upload Excel Data Sheet</h2>
+            <p>Upload the master spreadsheet containing records you want to cross-reference.</p>
+          </div>
+        </div>
+        
+        <div class="drop-zone" id="excel-drop-zone">
+          <input type="file" id="excel-input" accept=".xlsx, .xls" style="display: none;">
+          <i data-lucide="upload-cloud" class="upload-icon"></i>
+          <p class="drop-text">Drag & drop your Excel file here or <span class="browse-btn">browse files</span></p>
+          <p class="file-limits">Supports .xlsx, .xls up to 20MB</p>
+        </div>
+
+        <div class="selected-file-banner" id="excel-file-banner" style="display: none;">
+          <div class="file-info">
+            <i data-lucide="file-text" class="file-icon"></i>
+            <span class="file-name" id="excel-file-name">master_invoices.xlsx</span>
+            <span class="file-size" id="excel-file-size">45 KB</span>
+          </div>
+          <button class="remove-file-btn" id="remove-excel-btn"><i data-lucide="x"></i></button>
+        </div>
+
+        <div class="preview-area" id="excel-preview-area" style="display: none;">
+          <h3>Data Preview (First 5 Rows)</h3>
+          <div class="table-scroll">
+            <table id="excel-preview-table"></table>
+          </div>
+        </div>
+
+        <div class="action-footer">
+          <button class="primary-btn next-btn" id="btn-goto-step2" disabled>
+            Continue to Configuration <i data-lucide="arrow-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 2: Configure Columns -->
+      <div class="setup-card" id="panel-step-2">
+        <div class="card-header">
+          <i data-lucide="settings-2" class="card-icon config-theme"></i>
+          <div>
+            <h2>Configure Reconciliation Fields</h2>
+            <p>Select which columns from your Excel sheet should be extracted and compared with the PDF documents.</p>
+          </div>
+        </div>
+
+        <div class="config-grid">
+          <div class="config-col">
+            <h3>1. Comparison Headers</h3>
+            <p class="section-help">Choose all the fields you want to match between the PDF and the spreadsheet.</p>
+            <div class="badge-selector-grid" id="headers-selector">
+              <!-- Dynamically populated badges -->
+            </div>
+          </div>
+          
+          <div class="config-col">
+            <h3>2. Unique Matching Key</h3>
+            <p class="section-help">Choose the primary column used to identify and pair each PDF with its corresponding spreadsheet row (e.g. Invoice #, ID, PO Number).</p>
+            <div class="select-wrapper">
+              <select id="match-key-select">
+                <option value="" disabled selected>Select unique matching key...</option>
+              </select>
+              <i data-lucide="chevron-down" class="select-chevron"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-footer">
+          <button class="secondary-btn back-btn" id="btn-back-to-step1">
+            <i data-lucide="arrow-left"></i> Change Excel File
+          </button>
+          <button class="primary-btn next-btn" id="btn-goto-step3" disabled>
+            Set Comparison Rules <i data-lucide="arrow-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Upload PDFs & Process -->
+      <div class="setup-card" id="panel-step-3">
+        <div class="card-header">
+          <i data-lucide="file-search" class="card-icon pdf-theme"></i>
+          <div>
+            <h2>Upload PDF Documents</h2>
+            <p>Upload the documents you wish to reconcile. You can upload up to 200 PDFs at once.</p>
+          </div>
+        </div>
+
+        <!-- PDF Upload Form -->
+        <div class="upload-section-group" id="pdf-upload-group">
+          <div class="drop-zone" id="pdf-drop-zone">
+            <input type="file" id="pdf-input" accept=".pdf" multiple style="display: none;">
+            <i data-lucide="file-up" class="upload-icon"></i>
+            <p class="drop-text">Drag & drop your PDF documents here or <span class="browse-btn">browse files</span></p>
+            <p class="file-limits">Supports multiple PDFs (Maximum 200 files)</p>
+          </div>
+
+          <div class="file-grid-container" id="pdf-file-grid-container" style="display: none;">
+            <div class="grid-header">
+              <span id="pdf-count-label">0 Files Selected</span>
+              <button class="clear-all-btn" id="clear-pdfs-btn">Clear All</button>
+            </div>
+            <div class="pdf-list-grid" id="pdf-list-grid">
+              <!-- Dynamic PDF items -->
+            </div>
+          </div>
+
+          <div class="action-footer">
+            <button class="secondary-btn back-btn" id="btn-back-to-step2">
+              <i data-lucide="arrow-left"></i> Back to Config
+            </button>
+            <button class="primary-btn start-pipeline-btn" id="btn-run-pipeline" disabled>
+              <i data-lucide="play-circle"></i> Start Reconciliation Pipeline
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress Tracker Interface (Visible during processing) -->
+        <div class="progress-section" id="pipeline-progress" style="display: none;">
+          <div class="progress-info-bar">
+            <div class="progress-details">
+              <h3 id="progress-status-title">Uploading Documents...</h3>
+              <p id="progress-status-subtitle">Establishing connection with parsing servers.</p>
+            </div>
+            <div class="progress-percentage-label" id="progress-percent">0%</div>
+          </div>
+
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="progress-bar-fill"></div>
+          </div>
+
+          <!-- Console-like logging panel -->
+          <div class="console-panel">
+            <div class="console-header">
+              <div class="console-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <span class="console-title">Pipeline Activity Log</span>
+            </div>
+            <div class="console-logs" id="console-logs">
+              <div class="log-line system">[SYSTEM] Ready to start pipeline.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 4: Reconciliation Report -->
+      <div class="setup-card" id="panel-step-4">
+        <div class="card-header">
+          <i data-lucide="file-check-2" class="card-icon report-theme"></i>
+          <div>
+            <h2>Reconciliation Audit Results</h2>
+            <p>Analyze matches, discrepancies, and export generated data sheets.</p>
+          </div>
+        </div>
+
+        <!-- Dashboard Stat Grid -->
+        <div class="audit-stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon-bg gray"><i data-lucide="files"></i></div>
+            <div class="stat-info">
+              <span class="stat-value" id="stat-total-processed">0</span>
+              <span class="stat-label">Total PDFs</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon-bg green"><i data-lucide="check-circle-2"></i></div>
+            <div class="stat-info">
+              <span class="stat-value" id="stat-matches">0</span>
+              <span class="stat-label">Matches</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon-bg red"><i data-lucide="alert-triangle"></i></div>
+            <div class="stat-info">
+              <span class="stat-value" id="stat-mismatches">0</span>
+              <span class="stat-label">Mismatches</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon-bg purple"><i data-lucide="help-circle"></i></div>
+            <div class="stat-info">
+              <span class="stat-value" id="stat-no-match">0</span>
+              <span class="stat-label">Excel Row Unmatched</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exporter Tools -->
+        <div class="export-tools-panel">
+          <h3>Download Detailed Audit Reports</h3>
+          <div class="export-buttons">
+            <a class="export-btn excel" id="export-excel-btn" href="#">
+              <i data-lucide="file-spreadsheet"></i> Download Excel Report
+            </a>
+            <a class="export-btn pdf" id="export-pdf-btn" href="#">
+              <i data-lucide="file-text"></i> Download PDF Report
+            </a>
+            <a class="export-btn word" id="export-word-btn" href="#">
+              <i data-lucide="file-text"></i> Download Word Report
+            </a>
+          </div>
+        </div>
+
+        <!-- Detailed Results Table -->
+        <div class="results-table-section">
+          <div class="table-controls">
+            <h3>Reconciliation Logs</h3>
+            <div class="search-filter-row">
+              <div class="search-wrapper">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" id="result-search-input" placeholder="Search PDF name or invoice key...">
+              </div>
+              <div class="filter-wrapper">
+                <select id="status-filter-select">
+                  <option value="ALL">All Records</option>
+                  <option value="FULL_MATCH">Full Matches</option>
+                  <option value="MISMATCH">Mismatches</option>
+                  <option value="PARTIAL_MATCH">Partial Matches (Missing Fields)</option>
+                  <option value="NO_EXCEL_MATCH">Unmatched in Excel</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-table-scroll">
+            <table class="report-data-table" id="report-detail-table">
+              <thead>
+                <!-- Populated dynamically -->
+              </thead>
+              <tbody>
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Unmatched Excel Rows section -->
+        <div class="unmatched-excel-section" style="margin-top: 30px;">
+          <h3>Unmatched Excel Master Records</h3>
+          <p class="section-help">Spreadsheet rows that did not pair with any uploaded PDF document.</p>
+          <div class="report-table-scroll" style="max-height: 250px;">
+            <table class="report-data-table" id="unmatched-excel-table">
+              <thead>
+                <!-- Populated dynamically -->
+              </thead>
+              <tbody>
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="action-footer">
+          <button class="primary-btn restart-btn" id="btn-restart-app">
+            <i data-lucide="refresh-cw"></i> Start New Comparison Project
+          </button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <footer class="app-footer-bar">
+    <p>Powered by LlamaParse & Gemini. ReconcileAI &copy; 2026.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

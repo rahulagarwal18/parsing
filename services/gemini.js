@@ -29,62 +29,98 @@ async function callClaude(prompt, responseSchema, toolName = "extract_data") {
   }
 
   const normalizedSchema = normalizeSchema(responseSchema);
+  
+  // List of models to try in order of preference
+  const models = [
+    "claude-3-5-sonnet-latest",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-sonnet-20240620",
+    "claude-3-5-haiku-latest",
+    "claude-3-5-haiku-20241022",
+    "claude-3-haiku-20240307"
+  ];
 
-  const requestBody = {
-    model: "claude-3-5-sonnet-20241022", // Premium model for highly accurate data extraction
-    max_tokens: 4000,
-    messages: [
-      { role: "user", content: prompt }
-    ],
-    tools: [
-      {
-        name: toolName,
-        description: "Format the extracted data into structured JSON matching the schema.",
-        input_schema: normalizedSchema
+  let lastError = null;
+
+  for (const model of models) {
+    const requestBody = {
+      model: model,
+      max_tokens: 4000,
+      messages: [
+        { role: "user", content: prompt }
+      ],
+      tools: [
+        {
+          name: toolName,
+          description: "Format the extracted data into structured JSON matching the schema.",
+          input_schema: normalizedSchema
+        }
+      ],
+      tool_choice: { type: "tool", name: toolName }
+    };
+
+    let response;
+    let delay = 1500;
+    const maxRetries = 2; // Low retries per model since we have fallbacks
+    let isModelNotFoundError = false;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const toolUse = result.content?.find(c => c.type === "tool_use");
+          if (!toolUse || !toolUse.input) {
+            throw new Error("Claude failed to return structured tool output.");
+          }
+          return toolUse.input; // Success!
+        }
+
+        const errText = await response.text();
+        
+        // If the model is not found/not supported for this key/account, proceed to fallback
+        if (response.status === 404 || errText.includes("not_found_error") || errText.includes("model_not_found")) {
+          isModelNotFoundError = true;
+          console.warn(`Model ${model} is not supported/found. Trying fallback model...`);
+          break;
+        }
+
+        throw new Error(`Anthropic API error (${response.status}): ${errText}`);
+      } catch (err) {
+        if (isModelNotFoundError) {
+          lastError = err;
+          break;
+        }
+        if (attempt === maxRetries) {
+          lastError = err;
+          break;
+        }
+        console.warn(`Claude API attempt ${attempt} failed for model ${model} (${err.message}). Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
       }
-    ],
-    tool_choice: { type: "tool", name: toolName }
-  };
+    }
 
-  let response;
-  let delay = 1500;
-  const maxRetries = 3;
+    if (isModelNotFoundError) {
+      continue; // Skip to next model
+    }
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json"
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (response.ok) {
-        break; // Success
-      }
-
-      const errText = await response.text();
-      throw new Error(`Anthropic API error (${response.status}): ${errText}`);
-    } catch (err) {
-      if (attempt === maxRetries) {
-        throw err;
-      }
-      console.warn(`Claude API attempt ${attempt} failed (${err.message}). Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2;
+    // If it was another error (like quota or billing), stop and throw immediately
+    if (lastError) {
+      throw lastError;
     }
   }
 
-  const result = await response.json();
-  const toolUse = result.content?.find(c => c.type === "tool_use");
-  if (!toolUse || !toolUse.input) {
-    throw new Error("Claude failed to return structured tool output.");
-  }
-
-  return toolUse.input;
+  throw new Error(`All Anthropic models failed. Last error: ${lastError ? lastError.message : "unknown error"}`);
 }
 
 /**

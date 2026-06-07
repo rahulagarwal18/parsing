@@ -175,10 +175,11 @@ function goToStep(stepNumber) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// --- STEP 1: EXCEL HANDLERS ---
+// --- STEP 1: EXCEL & PDF MASTER HANDLERS ---
 function handleExcelFileSelect(file) {
-  if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-    alert("Please upload a valid Excel spreadsheet (.xlsx or .xls)");
+  const isPdf = file.name.toLowerCase().endsWith('.pdf');
+  if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls') && !isPdf) {
+    alert("Please upload a valid Excel spreadsheet (.xlsx or .xls) or PDF document (.pdf)");
     return;
   }
   
@@ -191,7 +192,11 @@ function handleExcelFileSelect(file) {
   document.getElementById('excel-file-banner').style.display = 'flex';
 
   // Upload to API immediately to extract headers and preview
-  uploadExcelToServer(file);
+  if (isPdf) {
+    uploadPdfMasterToServer(file);
+  } else {
+    uploadExcelToServer(file);
+  }
 }
 
 function resetExcelUpload() {
@@ -207,6 +212,47 @@ function resetExcelUpload() {
   document.getElementById('btn-goto-step2').disabled = true;
 
   document.getElementById('excel-input').value = '';
+}
+
+async function uploadPdfMasterToServer(file) {
+  const formData = new FormData();
+  formData.append('pdfMasterFile', file);
+
+  try {
+    // Show spinner/progress or loading text in preview area
+    document.getElementById('excel-preview-area').style.display = 'block';
+    const previewTable = document.getElementById('excel-preview-table');
+    previewTable.innerHTML = `<tr><td style="text-align:center; padding: 40px; color: var(--text-muted);">
+      <div class="loading-spinner"></div>
+      <div style="margin-top: 15px; font-weight: 500;">Parsing master PDF and extracting table records via LlamaParse & Gemini...</div>
+      <div style="font-size: 11px; margin-top: 6px; opacity: 0.8;">This takes a moment as we digitize the PDF structure.</div>
+    </td></tr>`;
+
+    const res = await fetch('/api/upload-pdf-master', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to parse master PDF');
+    }
+
+    const data = await res.json();
+    appState.excelHeaders = data.headers;
+    appState.excelPreview = data.preview;
+
+    // Populated header configuration layout (Step 2)
+    populateStep2Config();
+    
+    // Render preview
+    renderExcelPreviewTable();
+
+    document.getElementById('btn-goto-step2').disabled = false;
+  } catch (error) {
+    alert("Error loading master PDF: " + error.message);
+    resetExcelUpload();
+  }
 }
 
 async function uploadExcelToServer(file) {

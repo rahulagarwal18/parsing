@@ -123,3 +123,98 @@ ${documentText}
     return fallback;
   }
 }
+
+/**
+ * Converts unstructured PDF markdown text (e.g. parsed via LlamaParse) into structured tabular headers and rows.
+ * Uses structured JSON output from Gemini to guarantee format.
+ * 
+ * @param {string} markdownText - Unstructured document text/markdown
+ * @returns {Promise<{headers: string[], rows: Record<string, string>[]}>}
+ */
+export async function convertPdfMarkdownToTable(markdownText) {
+  if (!apiKey) {
+    throw new Error("Gemini API key is not configured.");
+  }
+
+  const prompt = `
+You are an expert structured data parser. Your task is to identify and extract the main tabular data or record list from the following document text/markdown.
+Convert it into a structured JSON object containing:
+1. "headers": An array of strings representing the column names of the table.
+2. "rows": An array of objects where each object represents a row in the table, with keys exactly matching the column headers.
+
+Instructions:
+- If there are multiple tables, extract the primary one containing the main records (e.g. invoice list, transaction ledger, client records).
+- Normalize column names to be concise and clear.
+- Ensure every row object has the keys defined in "headers". If a cell is blank in a row, use empty string "".
+- Return ONLY the raw JSON object conforming to the schema. Do not put markdown code fences around the JSON.
+`;
+
+  const promptContent = `
+${prompt}
+
+Document Text:
+---
+${markdownText}
+---
+`;
+
+  const responseSchema = {
+    type: "OBJECT",
+    properties: {
+      headers: {
+        type: "ARRAY",
+        items: { type: "STRING" },
+        description: "List of table column names"
+      },
+      rows: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          additionalProperties: { type: "STRING" },
+          description: "Row data representing records"
+        },
+        description: "Array of row objects matching the headers"
+      }
+    },
+    required: ["headers", "rows"]
+  };
+
+  try {
+    let response;
+    let delay = 1500;
+    const maxRetries = 3;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: [promptContent],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: responseSchema,
+            temperature: 0.1,
+          }
+        });
+        break;
+      } catch (err) {
+        if (attempt === maxRetries) {
+          throw err;
+        }
+        console.warn(`Gemini PDF parse attempt ${attempt} failed (${err.message}). Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
+
+    const responseText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseText) {
+      throw new Error("Empty response from Gemini API");
+    }
+
+    const parsedData = JSON.parse(responseText.trim());
+    return parsedData;
+  } catch (error) {
+    console.error("Gemini markdown to table conversion error:", error);
+    throw new Error(`Failed to extract structured data from PDF: ${error.message}`);
+  }
+}

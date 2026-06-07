@@ -7,7 +7,7 @@ import os from "os";
 import dotenv from "dotenv";
 import XLSX from "xlsx";
 import { parsePdf } from "../services/llama.js";
-import { extractFieldsFromText } from "../services/gemini.js";
+import { extractFieldsFromText, convertPdfMarkdownToTable } from "../services/gemini.js";
 import { compareData } from "../services/comparator.js";
 import { generateExcelReport, generatePdfReport, generateDocxReport } from "../services/exporter.js";
 import { fileURLToPath } from "url";
@@ -143,6 +143,50 @@ app.post("/api/upload-excel", upload.single("excelFile"), (req, res) => {
     });
   } catch (error) {
     console.error("Excel upload error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Endpoint to upload PDF as Master Document.
+ */
+app.post("/api/upload-pdf-master", upload.single("pdfMasterFile"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No PDF master file uploaded" });
+    }
+
+    const filePath = req.file.path;
+
+    // 1. Parse PDF using LlamaParse
+    const parsed = await parsePdf(filePath);
+
+    // 2. Convert LlamaParse markdown text into structured table data (headers & rows) via Gemini
+    const tableData = await convertPdfMarkdownToTable(parsed.markdown);
+
+    // Clean up uploaded file
+    try {
+      fs.unlinkSync(filePath);
+    } catch (unlinkErr) {
+      console.error(`Failed to delete master PDF temp file ${filePath}:`, unlinkErr);
+    }
+
+    // Cache the structured master data in currentJobState (acting as the master sheet)
+    currentJobState.excelData = {
+      headers: tableData.headers,
+      rows: tableData.rows
+    };
+    currentJobState.excelFilePath = null; // No Excel path since we uploaded a PDF
+    currentJobState.comparisonResults = null;
+
+    // Send headers and preview rows back to frontend
+    res.json({
+      success: true,
+      headers: tableData.headers,
+      preview: tableData.rows.slice(0, 5)
+    });
+  } catch (error) {
+    console.error("PDF master upload error:", error);
     res.status(500).json({ error: error.message });
   }
 });

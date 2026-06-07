@@ -7,15 +7,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-const apiKey = process.env.GEMINI_API_KEY;
-
-if (!apiKey) {
-  console.warn("WARNING: GEMINI_API_KEY is not set in .env file.");
+function getAiClient() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API key is not configured.");
+  }
+  return new GoogleGenAI({
+    apiKey: apiKey,
+  });
 }
-
-const ai = new GoogleGenAI({
-  apiKey: apiKey || "",
-});
 
 /**
  * Extracts values for the requested headers from the parsed document markdown.
@@ -27,9 +27,7 @@ const ai = new GoogleGenAI({
  * @returns {Promise<Record<string, string>>} - Map of header -> extracted value
  */
 export async function extractFieldsFromText(documentText, headers, customPrompt = "") {
-  if (!apiKey) {
-    throw new Error("Gemini API key is not configured.");
-  }
+  const ai = getAiClient();
 
   if (!headers || headers.length === 0) {
     return {};
@@ -132,9 +130,7 @@ ${documentText}
  * @returns {Promise<{headers: string[], rows: Record<string, string>[]}>}
  */
 export async function convertPdfMarkdownToTable(markdownText) {
-  if (!apiKey) {
-    throw new Error("Gemini API key is not configured.");
-  }
+  const ai = getAiClient();
 
   const prompt = `
 You are an expert structured data parser. Your task is to identify and extract the main tabular data or record list from the following document text/markdown.

@@ -8,15 +8,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-const apiKey = process.env.LLAMA_CLOUD_API_KEY;
-
-if (!apiKey) {
-  console.warn("WARNING: LLAMA_CLOUD_API_KEY is not set in .env file.");
+function getLlamaClient() {
+  const apiKey = process.env.LLAMA_CLOUD_API_KEY;
+  if (!apiKey) {
+    throw new Error("LlamaCloud API key is not configured.");
+  }
+  return new LlamaCloud({
+    apiKey: apiKey,
+  });
 }
-
-const client = new LlamaCloud({
-  apiKey: apiKey || "",
-});
 
 /**
  * Parses a PDF file using LlamaParse and returns its full markdown text.
@@ -27,6 +27,8 @@ export async function parsePdf(filePath) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`File not found: ${filePath}`);
   }
+
+  const client = getLlamaClient();
 
   // Upload file
   const fileObj = await client.files.create({

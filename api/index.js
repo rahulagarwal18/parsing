@@ -20,7 +20,7 @@ app.use(cors());
 app.use(express.json());
 
 // Serve static frontend files from 'public' folder (primarily for local development)
-app.use(express.static("public"));
+app.use(express.static(path.join(process.cwd(), "public")));
 
 // Ensure uploads and temp directories exist (use os.tmpdir() on Vercel)
 const isVercel = process.env.VERCEL || process.env.NOW_BUILDER;

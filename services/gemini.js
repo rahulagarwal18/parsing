@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -7,33 +6,96 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-function getAiClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
+/**
+ * Normalizes a JSON schema to use lowercase types for Anthropic Tool schemas.
+ */
+function normalizeSchema(schema) {
+  return JSON.parse(JSON.stringify(schema, (key, value) => {
+    if (key === "type" && typeof value === "string") {
+      return value.toLowerCase();
+    }
+    return value;
+  }));
+}
+
+/**
+ * Calls the Anthropic Claude API using native fetch with tool choice forcing.
+ * This guarantees a structured JSON output conforming to the responseSchema.
+ */
+async function callClaude(prompt, responseSchema, toolName = "extract_data") {
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Gemini API key is not configured.");
+    throw new Error("Anthropic API key is not configured.");
   }
-  return new GoogleGenAI({
-    apiKey: apiKey,
-  });
+
+  const normalizedSchema = normalizeSchema(responseSchema);
+
+  const requestBody = {
+    model: "claude-3-5-sonnet-20241022", // Premium model for highly accurate data extraction
+    max_tokens: 4000,
+    messages: [
+      { role: "user", content: prompt }
+    ],
+    tools: [
+      {
+        name: toolName,
+        description: "Format the extracted data into structured JSON matching the schema.",
+        input_schema: normalizedSchema
+      }
+    ],
+    tool_choice: { type: "tool", name: toolName }
+  };
+
+  let response;
+  let delay = 1500;
+  const maxRetries = 3;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (response.ok) {
+        break; // Success
+      }
+
+      const errText = await response.text();
+      throw new Error(`Anthropic API error (${response.status}): ${errText}`);
+    } catch (err) {
+      if (attempt === maxRetries) {
+        throw err;
+      }
+      console.warn(`Claude API attempt ${attempt} failed (${err.message}). Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
+    }
+  }
+
+  const result = await response.json();
+  const toolUse = result.content?.find(c => c.type === "tool_use");
+  if (!toolUse || !toolUse.input) {
+    throw new Error("Claude failed to return structured tool output.");
+  }
+
+  return toolUse.input;
 }
 
 /**
  * Extracts values for the requested headers from the parsed document markdown.
- * Uses structured JSON output from Gemini to guarantee format.
- * 
- * @param {string} documentText - The text or markdown parsed from the PDF
- * @param {string[]} headers - The headers we want to extract
- * @param {string} customPrompt - Custom user prompt instruction to guide extraction
- * @returns {Promise<Record<string, string>>} - Map of header -> extracted value
+ * Uses structured tool calling with Claude to guarantee format.
  */
 export async function extractFieldsFromText(documentText, headers, customPrompt = "") {
-  const ai = getAiClient();
-
   if (!headers || headers.length === 0) {
     return {};
   }
 
-  // Construct a prompt explaining the extraction task
   let prompt = `
 You are a highly accurate data extraction system. Your task is to extract the exact values for the requested fields from the following document text.
 If a field is not present in the document, return an empty string "" for that field.
@@ -58,62 +120,24 @@ ${documentText}
 ---
 `;
 
-  // Build schema dynamically
   const schemaProperties = {};
   for (const header of headers) {
-    // Sanitize property name (must match JSON object key requirements, but we want it to map to the original header)
-    // We will use the original headers since the API accepts keys with spaces.
-    // If keys with spaces cause issues, we will handle them. But standard JSON schema objects allow any string as property name.
     schemaProperties[header] = {
-      type: "STRING",
+      type: "string",
       description: `Value of the field '${header}' extracted from the text. Empty string if not found.`
     };
   }
 
   const responseSchema = {
-    type: "OBJECT",
+    type: "object",
     properties: schemaProperties,
     required: headers
   };
 
   try {
-    // Retry wrapper for robust API execution
-    let response;
-    let delay = 1500;
-    const maxRetries = 3;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        response = await ai.models.generateContent({
-          model: "gemini-2.0-flash", // stable, fast, production-ready model
-          contents: [prompt],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-            temperature: 0.1,
-          }
-        });
-        break; // success, break retry loop
-      } catch (err) {
-        if (attempt === maxRetries) {
-          throw err; // throw on final failure
-        }
-        console.warn(`Gemini API attempt ${attempt} failed (${err.message}). Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2; // exponential backoff
-      }
-    }
-
-    const responseText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!responseText) {
-      throw new Error("Empty response from Gemini API");
-    }
-
-    const parsedData = JSON.parse(responseText.trim());
-    return parsedData;
+    return await callClaude(prompt, responseSchema, "extract_fields");
   } catch (error) {
-    console.error("Gemini field extraction error after retries:", error);
-    // Fallback: Attempt simple text parsing or return empty object
+    console.error("Claude field extraction error:", error);
     const fallback = {};
     for (const h of headers) {
       fallback[h] = "";
@@ -124,17 +148,12 @@ ${documentText}
 
 /**
  * Converts unstructured PDF markdown text (e.g. parsed via LlamaParse) into structured tabular headers and rows.
- * Uses structured JSON output from Gemini to guarantee format.
- * 
- * @param {string} markdownText - Unstructured document text/markdown
- * @returns {Promise<{headers: string[], rows: Record<string, string>[]}>}
+ * Uses structured tool calling with Claude to guarantee format.
  */
 export async function convertPdfMarkdownToTable(markdownText) {
-  const ai = getAiClient();
-
   const prompt = `
 You are an expert structured data parser. Your task is to identify and extract the main tabular data or record list from the following document text/markdown.
-Convert it into a structured JSON object containing:
+Convert it into a structured format containing:
 1. "headers": An array of strings representing the column names of the table.
 2. "rows": An array of objects where each object represents a row in the table, with keys exactly matching the column headers.
 
@@ -142,11 +161,6 @@ Instructions:
 - If there are multiple tables, extract the primary one containing the main records (e.g. invoice list, transaction ledger, client records).
 - Normalize column names to be concise and clear.
 - Ensure every row object has the keys defined in "headers". If a cell is blank in a row, use empty string "".
-- Return ONLY the raw JSON object conforming to the schema. Do not put markdown code fences around the JSON.
-`;
-
-  const promptContent = `
-${prompt}
 
 Document Text:
 ---
@@ -155,18 +169,18 @@ ${markdownText}
 `;
 
   const responseSchema = {
-    type: "OBJECT",
+    type: "object",
     properties: {
       headers: {
-        type: "ARRAY",
-        items: { type: "STRING" },
+        type: "array",
+        items: { type: "string" },
         description: "List of table column names"
       },
       rows: {
-        type: "ARRAY",
+        type: "array",
         items: {
-          type: "OBJECT",
-          additionalProperties: { type: "STRING" },
+          type: "object",
+          additionalProperties: { type: "string" },
           description: "Row data representing records"
         },
         description: "Array of row objects matching the headers"
@@ -176,41 +190,9 @@ ${markdownText}
   };
 
   try {
-    let response;
-    let delay = 1500;
-    const maxRetries = 3;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: [promptContent],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema,
-            temperature: 0.1,
-          }
-        });
-        break;
-      } catch (err) {
-        if (attempt === maxRetries) {
-          throw err;
-        }
-        console.warn(`Gemini PDF parse attempt ${attempt} failed (${err.message}). Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
-      }
-    }
-
-    const responseText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!responseText) {
-      throw new Error("Empty response from Gemini API");
-    }
-
-    const parsedData = JSON.parse(responseText.trim());
-    return parsedData;
+    return await callClaude(prompt, responseSchema, "parse_table");
   } catch (error) {
-    console.error("Gemini markdown to table conversion error:", error);
-    throw new Error(`Failed to extract structured data from PDF: ${error.message}`);
+    console.error("Claude markdown to table conversion error:", error);
+    throw new Error(`Failed to extract structured data from PDF via Claude: ${error.message}`);
   }
 }

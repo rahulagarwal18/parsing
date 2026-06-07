@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../.env"), override: true });
 
 /**
  * Normalizes a JSON schema to use lowercase types for Anthropic Tool schemas.
@@ -16,6 +16,50 @@ function normalizeSchema(schema) {
     }
     return value;
   }));
+}
+/**
+ * Dynamically fetches available models from Anthropic API and sorts them
+ * to prioritize Sonnet and Haiku (faster/cheaper) over Opus.
+ */
+async function getAvailableModels(apiKey) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const response = await fetch("https://api.anthropic.com/v1/models", {
+      method: "GET",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && Array.isArray(data.data)) {
+        const activeModels = data.data.map(m => m.id);
+        // Sort models so Sonnet/Haiku are prioritized over Opus/others to optimize speed & cost
+        activeModels.sort((a, b) => {
+          const score = (name) => {
+            const nameLower = name.toLowerCase();
+            if (nameLower.includes("sonnet")) return 1;
+            if (nameLower.includes("haiku")) return 2;
+            if (nameLower.includes("opus")) return 3;
+            return 4;
+          };
+          return score(a) - score(b);
+        });
+        return activeModels;
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to fetch available Anthropic models dynamically:", err.message);
+  }
+  return [];
 }
 
 /**
@@ -30,8 +74,14 @@ async function callClaude(prompt, responseSchema, toolName = "extract_data") {
 
   const normalizedSchema = normalizeSchema(responseSchema);
   
-  // List of models to try in order of preference
-  const models = [
+  // Dynamically fetch models available to this key
+  const fetchedModels = await getAvailableModels(apiKey);
+  
+  // List of fallback models to try in order of preference
+  const defaultModels = [
+    "claude-sonnet-4-6",
+    "claude-sonnet-4-5-20250929",
+    "claude-haiku-4-5-20251001",
     "claude-3-5-sonnet-latest",
     "claude-3-5-sonnet-20241022",
     "claude-3-5-sonnet-20240620",
@@ -39,6 +89,9 @@ async function callClaude(prompt, responseSchema, toolName = "extract_data") {
     "claude-3-5-haiku-20241022",
     "claude-3-haiku-20240307"
   ];
+
+  // Merge lists to prioritize fetched active models, removing duplicates
+  const models = [...new Set([...fetchedModels, ...defaultModels])];
 
   let lastError = null;
 

@@ -1,0 +1,9 @@
+# Ignore local dev entrypoint
+server.js
+
+# Ignore test validation pipeline
+test-pipeline.js
+
+# Ignore temp and upload directories
+temp/
+uploads/
